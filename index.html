@@ -315,11 +315,24 @@
   /* ===== Querformat auf schmalen/kurzen Bildschirmen (Handy quer) ===== */
   @media (max-height:520px) and (orientation:landscape){
     #app{ height:100vh; padding:8px; gap:8px; }
-    #startScreen{ padding:12px 8px; max-height:100vh; overflow-y:auto; }
+
+    /* ---- Startbildschirm: kompakter, damit Menü + Howto ohne viel
+       Scrollen passen ---- */
+    #startScreen{ padding:8px 8px; max-height:100vh; overflow-y:auto; gap:4px; }
+    .brand-icon{ font-size:30px; }
+    .start-title{ font-size:32px; }
+    .start-sub{ font-size:13px; margin:0 0 10px; }
+    .start-menu{ max-width:280px; gap:8px; margin:4px 0; }
+    .start-menu-btn{ padding:10px 14px; font-size:14px; }
+    #howtoBox{ margin-top:10px; padding:10px 12px; font-size:12.5px; line-height:1.4; }
     .map-tier-grid{ grid-template-columns:repeat(3, 1fr); }
+
+    /* ---- Spielbildschirm: Canvas links (volle Höhe), HUD rechts in
+       einer schmalen Spalte - die Spalte muss breit genug für 4
+       Icon-Buttons nebeneinander sein, sonst ueberlappen sie ---- */
     #gameScreen.active{
       height:100%;
-      grid-template-columns: 1fr 200px;
+      grid-template-columns: 1fr 216px;
       grid-template-rows: auto auto 1fr auto;
       grid-template-areas:
         "canvas topbar"
@@ -328,14 +341,43 @@
         "canvas selection";
       gap:8px;
     }
-    #gameAreaWrap{ height:100%; max-height:100%; width:auto; justify-self:start; }
-    #topbar{ flex-wrap:nowrap; }
-    .resources{ flex-direction:column; gap:4px; }
-    #buildMenu{ flex-direction:column; overflow-y:auto; max-height:100%; flex-wrap:nowrap; }
-    .tower-card{ flex-direction:row; justify-content:flex-start; gap:8px; min-width:0; padding:6px 8px; }
+    /* KEIN width:auto/height:100%-Override hier: das liess den Canvas (per
+       aspect-ratio von der Hoehe her berechnet) breiter werden als seine
+       Grid-Spalte und in die rechte HUD-Spalte hineinragen (ueberdeckte
+       den Speed-Button). Die Standardregel (width:100%, Hoehe folgt per
+       aspect-ratio aus der Breite) passt zur Spaltenbreite und bleibt
+       daher auch im Quermodus unveraendert gueltig. */
+
+    /* Topbar: Ressourcen-Pillen UND die 4 Icon-Buttons (Speed/Sound/Pause/
+       Einstellungen) passen nicht nebeneinander in 216px - deshalb
+       untereinander statt in einer Zeile gequetscht. */
+    #topbar{ flex-direction:column; align-items:stretch; gap:6px; padding:8px; }
+    .resources{ flex-direction:row; flex-wrap:wrap; justify-content:center; gap:6px; }
+    .topbar-actions{ justify-content:center; gap:6px; }
+
+    /* Wellen-Leiste: Text + "Welle starten"-Button passen nicht mehr
+       nebeneinander in die schmale Spalte, darum ebenfalls gestapelt. */
+    #waveBar{ flex-direction:column; align-items:stretch; gap:6px; padding:8px 10px; text-align:center; }
+    #waveBarText{ font-size:12.5px; }
+    #startWaveBtn{ font-size:13px; padding:8px 10px; }
+
+    #buildMenu{ flex-direction:column; overflow-y:auto; max-height:100%; flex-wrap:nowrap; gap:6px; padding:8px; }
+    .tower-card{ flex-direction:row; justify-content:flex-start; gap:8px; min-width:0; padding:8px 10px; }
     .tower-card .tname{ text-align:left; }
+    .tower-card .emoji{ font-size:20px; }
+
     #controlHint{ display:none; }
-    #selectionPanel{ overflow-y:auto; max-height:160px; }
+    #selectionPanel{ overflow-y:auto; max-height:150px; padding:8px 10px; }
+
+    /* ---- Modals (Einstellungen/Kartenauswahl/Bestenlisten/Game-Over):
+       auf kurzen Bildschirmen oben ausrichten statt zentriert und selbst
+       scrollbar machen, sonst ragt der Inhalt oben/unten aus dem
+       sichtbaren Bereich raus und ist nicht erreichbar. ---- */
+    .modal-overlay{ align-items:flex-start; padding:8px; }
+    .modal-card{ max-height:96vh; overflow-y:auto; padding:14px; margin-top:2px; }
+    .modal-title{ font-size:19px; }
+    .modal-sub{ font-size:12.5px; margin:0 0 10px; }
+    #mapSelectBody, #leaderboardBody{ max-height:50vh; }
   }
 </style>
 </head>
