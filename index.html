@@ -355,11 +355,20 @@
     .map-tier-grid{ grid-template-columns:repeat(3, 1fr); }
 
     /* ---- Spielbildschirm: Canvas links (volle Höhe), HUD rechts in
-       einer schmalen Spalte - die Spalte muss breit genug für 4
-       Icon-Buttons nebeneinander sein, sonst ueberlappen sie ---- */
+       einer schmalen Spalte - die Spalte muss breit genug für 5
+       Icon-Buttons nebeneinander sein (Speed/Sound/Pause/Einstellungen/
+       Feedback), sonst umbricht der Flexbox-Zeile ein Button in eine
+       zweite Zeile, die Kopfzeile wird dadurch hoeher als geplant, und
+       der Rest (Turmauswahl) wird auf einen Rest-Millimeter gequetscht -
+       genau das war der gemeldete Bug ("Tuerme so schlecht auswaehlbar").
+       Rechnung fuer die Breite: auf echten Geraeten (body.touch-mode)
+       sind Icon-Buttons 44px breit (siehe body.touch-mode .icon-btn weiter
+       unten), 5 Stueck plus 4x 6px Gap plus 2x 8px Topbar-Padding braucht
+       5*44 + 4*6 + 16 = 260px - deshalb 264px statt der alten 216px
+       (die waren exakt fuer 4 Buttons bemessen, siehe Git-Historie). ---- */
     #gameScreen.active{
       height:100%;
-      grid-template-columns: 1fr 216px;
+      grid-template-columns: 1fr 264px;
       grid-template-rows: auto auto 1fr auto;
       grid-template-areas:
         "canvas topbar"
@@ -375,9 +384,9 @@
        aspect-ratio aus der Breite) passt zur Spaltenbreite und bleibt
        daher auch im Quermodus unveraendert gueltig. */
 
-    /* Topbar: Ressourcen-Pillen UND die 4 Icon-Buttons (Speed/Sound/Pause/
-       Einstellungen) passen nicht nebeneinander in 216px - deshalb
-       untereinander statt in einer Zeile gequetscht. */
+    /* Topbar: Ressourcen-Pillen UND die 5 Icon-Buttons (Speed/Sound/Pause/
+       Einstellungen/Feedback) passen nicht nebeneinander in die schmale
+       Spalte - deshalb untereinander statt in einer Zeile gequetscht. */
     #topbar{ flex-direction:column; align-items:stretch; gap:6px; padding:8px; }
     .resources{ flex-direction:row; flex-wrap:wrap; justify-content:center; gap:6px; }
     .topbar-actions{ justify-content:center; gap:6px; }
