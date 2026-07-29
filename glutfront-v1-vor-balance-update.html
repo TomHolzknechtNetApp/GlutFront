@@ -183,7 +183,6 @@
   #kohleValue{color:var(--molten-gold);}
   #livesValue{color:var(--forge-red);}
   #livesValue.low{animation:lowlife 0.9s ease-in-out infinite;}
-  #towerValue.low{color:var(--ember-red,#D9455F);}
   @keyframes lowlife{0%,100%{color:var(--forge-red);} 50%{color:#FF8A5C;}}
   #waveValue{color:var(--frost-teal);}
   .icon-btn{
@@ -191,28 +190,14 @@
     border-radius:8px; width:38px; height:38px; font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center;
   }
   .icon-btn:hover{border-color:var(--ember-orange);}
-  .topbar-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-  /* Bombe: bewusst ein Text-Button statt icon-btn, damit der Preis mitlaeuft.
-     .armed = gekauft und scharf, naechster Canvas-Klick zuendet. */
-  #bombBtn{padding:8px 12px; font-size:13px; white-space:nowrap;}
-  #bombBtn.armed{
-    background:linear-gradient(180deg, var(--forge-red) 0%, #7A2A08 100%);
-    border-color:var(--molten-gold); color:var(--parchment);
-    animation:bombpulse 0.8s ease-in-out infinite;
-  }
-  @keyframes bombpulse{0%,100%{box-shadow:0 0 0 rgba(240,180,41,0);} 50%{box-shadow:0 0 14px rgba(240,180,41,0.75);}}
-  #bombBtn.unaffordable{opacity:0.4;}
+  .topbar-actions{display:flex; gap:8px;}
 
   #waveBar{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     background:var(--seam-slate); border:1px dashed rgba(232,116,42,0.35); border-radius:10px; padding:8px 14px;
     font-size:14px;
   }
-  /* visibility statt display:none: #waveBar liegt in einer eigenen Grid-Zeile
-     (grid-area:wavebar). display:none liesse die Zeile kollabieren, wodurch die
-     Canvas bei jedem Wellenwechsel sprang und Bauklicks in dem Moment daneben
-     trafen (Playtest-Befund 5.1). visibility haelt die Zeilenhoehe fest. */
-  #waveBar.hidden{visibility:hidden;}
+  #waveBar.hidden{display:none;}
   #waveBarText{color:var(--parchment-dim);}
   #waveBarText b{color:var(--molten-gold); font-family:var(--font-mono);}
 
@@ -314,18 +299,6 @@
     flex:1; background:var(--seam-slate-2); border:1px solid rgba(232,116,42,0.3); border-radius:8px;
     color:var(--parchment); padding:8px 10px; font-size:14px; min-width:0;
   }
-
-  /* ===== Feedback-Formular ===== */
-  #feedbackModal textarea, #feedbackModal input[type="email"]{
-    width:100%; background:var(--seam-slate-2); border:1px solid rgba(232,116,42,0.3); border-radius:8px;
-    color:var(--parchment); padding:8px 10px; font-size:14px; font-family:inherit; margin-bottom:8px;
-    box-sizing:border-box;
-  }
-  #feedbackModal textarea{resize:vertical; min-height:90px;}
-  .feedback-status{font-size:13px; margin:2px 0 6px; min-height:16px;}
-  .feedback-status.success{color:var(--frost-teal);}
-  .feedback-status.error{color:var(--forge-red);}
-  .feedback-hp{display:none !important;}
   .hs-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;}
   .hs-list li{
     display:flex; gap:8px; align-items:baseline; background:var(--seam-slate-2); border-radius:6px;
@@ -424,10 +397,7 @@
 
     <div id="howtoBox">
       <b>So funktioniert's:</b> Platziere Einheiten entlang der Wege, um Gegner zu stoppen, bevor sie den Stollen erreichen.
-      Besiegte Gegner lassen <b>Kohle</b> fallen – damit kaufst du neue Einheiten, upgradest bestehende (bis <b>Stufe 4</b>, davon höchstens 3 gleichzeitig)
-      oder zündest eine <b>💣 Bombe</b> (🪨200, max. 15 pro Spiel, danach 6s Abklingzeit) auf
-      einen Punkt der Karte – Gegner, die durch die Bombe sterben, lassen dabei nur
-      <b>25 % Kohle</b> fallen.
+      Besiegte Gegner lassen <b>Kohle</b> fallen – damit kaufst du neue Einheiten oder upgradest bestehende (bis Stufe 3).
       Der <b>Ofen</b> 🔥 schießt nicht selbst, sondern spawnt kleine Glutwichte, die in Gegner reinrennen und ihre eigene HP als Schaden austeilen.
       Steuerbar per <b>Maus &amp; Tastatur</b> (Zahlen 1–6 wählen Einheiten, Leertaste startet die nächste Welle) oder <b>Touch</b> – einstellbar unter ⚙️.
     </div>
@@ -439,15 +409,12 @@
         <div class="pill" id="kohlePill"><span class="icon">🪨</span><span id="kohleValue">0</span></div>
         <div class="pill" id="livesPill"><span class="icon">❤</span><span id="livesValue">20</span></div>
         <div class="pill"><span class="icon">🌊</span><span id="waveValue">0/20</span></div>
-        <div class="pill" id="towerPill"><span class="icon">🏯</span><span id="towerValue">0/0</span></div>
       </div>
       <div class="topbar-actions">
-        <button class="btn" id="bombBtn" title="Flächenschaden-Bombe: kaufen, dann Ziel auf der Karte anklicken (max. 15 pro Spiel, danach 6s Abklingzeit). Gegner, die durch die Bombe sterben, lassen nur 25% Kohle fallen.">💣 Bombe (🪨200)</button>
         <button class="icon-btn" id="speedBtn" title="Geschwindigkeit">1×</button>
         <button class="icon-btn" id="soundBtn" title="Ton (Voll/Reduziert/Aus)">🔊</button>
         <button class="icon-btn" id="pauseBtn" title="Pause">⏸</button>
         <button class="icon-btn" id="settingsBtn" title="Einstellungen">⚙️</button>
-        <button class="icon-btn" id="feedbackBtn" title="Feedback/Idee senden">💬</button>
       </div>
     </div>
 
@@ -543,25 +510,6 @@
   </div>
 </div>
 
-<!-- Feedback Modal -->
-<div class="modal-overlay" id="feedbackModal">
-  <div class="modal-card">
-    <h2 class="modal-title">💬 Feedback &amp; Ideen</h2>
-    <p class="modal-sub">Bug gefunden, Idee fuer eine neue Karte, oder einfach meckern? Immer her damit.</p>
-    <form id="feedbackForm">
-      <textarea id="feedbackText" name="message" maxlength="2000" placeholder="Deine Nachricht..." required></textarea>
-      <input type="email" id="feedbackEmail" name="email" placeholder="Deine E-Mail (optional, falls Rueckfrage gewuenscht)" autocomplete="email">
-      <input type="text" name="_gotcha" class="feedback-hp" tabindex="-1" autocomplete="off">
-      <input type="hidden" name="_subject" value="GLUTFRONT Feedback">
-      <p class="feedback-status" id="feedbackStatus"></p>
-      <div class="modal-actions">
-        <button type="submit" class="btn btn-primary" id="feedbackSendBtn">Senden</button>
-        <button type="button" class="btn" id="closeFeedbackBtn">Abbrechen</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <script>
 'use strict';
 /* =========================================================
@@ -574,31 +522,10 @@ const STARTING_LIVES = 20;
 const TOTAL_WAVES = 20;
 const WAVE_AUTOSTART_SECONDS = 15;
 
-/* =========================================================
-   FEEDBACK-VERSAND (Formspree, rein clientseitig - kein eigener Server noetig)
-   ========================================================= */
-/* Formspree-Formular "GLUTFRONT Feedback", eingerichtet von Darius mit d.holzknecht@icloud.com. */
-const FEEDBACK_ENDPOINT = "https://formspree.io/f/mwvgyglj";
-
 /* Schwierigkeitsgrad koppelt Kartengeometrie UND Wellen-Formel (siehe
    Spieleentwicklung/GLUTFRONT-Konzept.md, Abschnitt 6). "Mittel" ist die
    urspruengliche Referenz-Formel (12%/6%, Boss alle 5 Wellen); Leicht/Schwer
    weichen bewusst nur moderat ab. */
-/* maxTowers begrenzt die Gesamtzahl gleichzeitig stehender Tuerme. Ohne Limit war
-   "Ofen ueberall hinstellen" dominant: Der Ofen hat als einziger Turm keine
-   Reichweitenpruefung (updateImps sucht den global naechsten Gegner), er wirkt also
-   von jedem beliebigen Feld aus und braucht - anders als alle Schuss-Tuerme - keinen
-   guten Platz. Das Limit macht Bauplaetze wieder zu einer knappen Ressource.
-
-   SEIT UMBAU 072826: maxTowers steht NICHT mehr hier (fest pro Schwierigkeitsgrad
-   18/16/14), sondern pro Karte in MAPS. Grund (Playtest-Befund 11.5): 18/16/14 sieht
-   nach sanftem Gefaelle aus, ist aber nach Abzug der Pflichtdeckung ein Faktor 4-5
-   (12-14 freie Tuerme auf Leicht gegen 3 auf Spirale/Randlauf). Und weil ab Welle
-   12-14 alles gebaut war, deckelte das Limit die Ausgaben - 69-75% aller Einnahmen
-   blieben ungenutzt liegen. Neue Regel: Pflichtdeckung der Karte + feste Reserve 3.
-   Nebeneffekt (gewollt): kurze/einfache Karten bekommen automatisch ein knapperes
-   Limit, damit ist auch Befund 11.4 "Weglaenge dominiert den Schwierigkeitsgrad"
-   gegengerechnet, ohne die Weglaenge selbst anzufassen. */
 const DIFFICULTY_TIERS = {
   leicht: { label:'Leicht', hpScalePerWave:0.09, rewardScalePerWave:0.08, bossInterval:6, livesMult:1.3, kohleMult:1.2 },
   mittel: { label:'Mittel', hpScalePerWave:0.12, rewardScalePerWave:0.06, bossInterval:5, livesMult:1.0, kohleMult:1.0 },
@@ -607,34 +534,17 @@ const DIFFICULTY_TIERS = {
 
 /* 9 Karten, 3 je Schwierigkeitsgrad. Nur waagrechte/senkrechte Wegstuecke
    (siehe Bau-Regel in der Bauanleitung, Schritt 1) - jede Karte ist damit
-   nur eine neue Wegpunkt-Liste, kein Sonderfall-Code.
-
-   blocked = Geroell-/Lavafelder: liegen NICHT auf dem Weg, sind aber auch nicht
-   bebaubar. Sie sind der eigentliche Schwierigkeitsregler der Karte.
-   Hintergrund: Bis dahin bestimmte allein die Wegform, wie viele Wegzellen ein
-   einzelner Turm gleichzeitig abdeckt - und die war genau falschherum verteilt
-   (leicht 7,0 Zellen | mittel 9,7 | schwer 12,0). Eine gefaltete Spirale laeuft
-   mehrfach am selben Punkt vorbei, ein einfacher Zickzack nur einmal; die
-   "schweren" Karten waren dadurch billiger zu verteidigen als die leichten.
-   Gesperrt werden gezielt die staerksten Bauplaetze, dadurch jetzt
-   leicht 10,3 | mittel 9,0 | schwer 9,3.
-
-   maxTowers pro Karte = Pflichtdeckung + Reserve 3 (Umbau 072826, siehe Kommentar
-   bei DIFFICULTY_TIERS). "Pflichtdeckung" = minimale Turmzahl fuer 100% Wegabdeckung
-   bei Referenzreichweite 120px, greedy Set-Cover ueber rasterizePath()/isCellFree().
-   Ausnahme Glutschlucht: 6 der 58 Wegzellen sind mit Reichweite 120 von keiner
-   bebaubaren Zelle aus erreichbar (zu abgelegen zwischen den Sperrfeldern) - die
-   Pflichtdeckung 8 deckt dort bewusst nicht 100%, das ist eine Karteneigenheit. */
+   nur eine neue Wegpunkt-Liste, kein Sonderfall-Code. */
 const MAPS = {
-  tal:          { name:'Talpfad',       tier:'leicht', maxTowers:9,  points:[[0,4],[5,4],[5,6],[9,6],[9,3],[6,3],[6,1],[12,1],[12,5],[15,5]], blocked:[] },
-  schachtweg:   { name:'Schachtweg',    tier:'leicht', maxTowers:8,  points:[[0,3],[4,3],[4,6],[8,6],[8,4],[6,4],[6,2],[11,2],[11,6],[15,6]], blocked:[] },
-  senkgrube:    { name:'Senkgrube',     tier:'leicht', maxTowers:7,  points:[[0,7],[4,7],[4,1],[10,1],[10,5],[15,5]], blocked:[] },
-  sKurve:       { name:'S-Kurve',       tier:'mittel', maxTowers:8,  points:[[0,1],[3,1],[3,6],[8,6],[8,1],[11,1],[11,7],[15,7]], blocked:[[9,3],[10,3]] },
-  kesselkurve:  { name:'Kesselkurve',   tier:'mittel', maxTowers:9,  points:[[0,4],[3,4],[3,1],[7,1],[7,7],[11,7],[11,3],[15,3]], blocked:[[5,2],[5,3]] },
-  stollenbogen: { name:'Stollenbogen',  tier:'mittel', maxTowers:10, points:[[0,0],[5,0],[5,5],[2,5],[2,8],[9,8],[9,2],[15,2]], blocked:[[4,6],[4,7]] },
-  spirale:      { name:'Spirale',       tier:'schwer', maxTowers:14, points:[[0,0],[14,0],[14,8],[1,8],[1,2],[12,2],[12,6],[4,6],[4,4],[9,4]], blocked:[[6,5],[7,5],[9,1],[10,1],[10,4],[11,1],[12,1],[12,7],[13,2],[13,6]] },
-  tiefenspirale:{ name:'Randlauf',      tier:'schwer', maxTowers:13, points:[[0,0],[15,0],[15,4],[0,4],[0,8],[15,8]], blocked:[[1,5],[1,6],[1,7],[2,6],[13,2],[14,2]] },
-  glutschlucht: { name:'Glutschlucht',  tier:'schwer', maxTowers:11, points:[[0,1],[12,1],[12,3],[3,3],[3,5],[14,5],[14,7],[2,7],[2,4],[7,4]], blocked:[[3,2],[3,6],[4,2],[4,6],[5,2],[5,6],[6,2],[6,6],[7,2],[7,6],[8,2],[8,4]] }
+  tal:          { name:'Talpfad',       tier:'leicht', points:[[0,4],[6,4],[6,7],[12,7],[12,2],[15,2]] },
+  schachtweg:   { name:'Schachtweg',    tier:'leicht', points:[[0,2],[13,2],[13,6],[15,6]] },
+  senkgrube:    { name:'Senkgrube',     tier:'leicht', points:[[0,7],[4,7],[4,1],[10,1],[10,5],[15,5]] },
+  sKurve:       { name:'S-Kurve',       tier:'mittel', points:[[0,1],[3,1],[3,6],[8,6],[8,1],[11,1],[11,7],[15,7]] },
+  kesselkurve:  { name:'Kesselkurve',   tier:'mittel', points:[[0,4],[3,4],[3,1],[7,1],[7,7],[11,7],[11,3],[15,3]] },
+  stollenbogen: { name:'Stollenbogen',  tier:'mittel', points:[[0,0],[5,0],[5,5],[2,5],[2,8],[9,8],[9,2],[15,2]] },
+  spirale:      { name:'Spirale',       tier:'schwer', points:[[0,0],[14,0],[14,8],[1,8],[1,2],[12,2],[12,6],[4,6],[4,4],[9,4]] },
+  tiefenspirale:{ name:'Tiefenspirale', tier:'schwer', points:[[0,8],[15,8],[15,0],[2,0],[2,6],[13,6],[13,2],[5,2],[5,4],[9,4]] },
+  glutschlucht: { name:'Glutschlucht',  tier:'schwer', points:[[0,1],[12,1],[12,3],[3,3],[3,5],[14,5],[14,7],[2,7],[2,4],[7,4]] }
 };
 
 function rasterizePath(points){
@@ -656,30 +566,9 @@ const ENEMY_TYPES = {
   boss:   { name:'Drache',      hp:500, speed:40,  reward:150, livesCost:5, emoji:'🐉' }
 };
 
-/* Bosswellen = alle Vielfachen von bossInterval bis TOTAL_WAVES, aber die LETZTE
-   davon wird auf TOTAL_WAVES verschoben statt eine zusaetzliche anzuhaengen - z.B.
-   bossInterval 6 bei TOTAL_WAVES 20: statt 6,12,18 (Welle 20 ohne Boss) wird daraus
-   6,12,20 (die 18 verschiebt sich auf 20). Faellt bereits ein Vielfaches auf
-   TOTAL_WAVES (z.B. Intervall 5 bei 20), passiert nichts - 5,10,15,20 bleibt so. */
-function computeBossWaves(bossInterval, totalWaves){
-  const waves = [];
-  for (let n = bossInterval; n <= totalWaves; n += bossInterval) waves.push(n);
-  if (waves.length === 0) return [totalWaves];
-  if (waves[waves.length-1] !== totalWaves) waves[waves.length-1] = totalWaves;
-  return waves;
-}
-
-/* Boss-Zusatzskalierung ab Welle 10 (Umbau 072826). Playtest-Befund 11.5: Bosswelle 5
-   ist der einzige echte Haertepunkt des Spiels, ab Welle 10 sterben selbst Doppel-Bosse
-   verlustfrei - weil Boss-HP mit derselben linearen Rate wachsen wie alle anderen
-   Gegner, die Spielerstaerke durch Upgrades aber schneller. Dieser Multiplikator wirkt
-   ZUSAETZLICH zu hpScale und ausschliesslich auf Gegner vom Typ 'boss'. */
-const bossLateBonusPerWave = 0.10; // +10% zusaetzlich pro Welle ab Welle 10, NUR Bosse
-
 function generateWave(n, tierCfg){
-  const isBoss = computeBossWaves(tierCfg.bossInterval, TOTAL_WAVES).includes(n);
+  const isBoss = n % tierCfg.bossInterval === 0;
   const hpScale = 1 + (n-1)*tierCfg.hpScalePerWave;
-  const bossHpExtra = (isBoss && n >= 10) ? 1 + (n - 9) * bossLateBonusPerWave : 1;
   const rewardScale = 1 + (n-1)*tierCfg.rewardScalePerWave;
   const list = [];
   const add = (type,count,stagger) => { for(let i=0;i<count;i++) list.push({type, delay:i*stagger}); };
@@ -692,76 +581,24 @@ function generateWave(n, tierCfg){
     if (n>=6) add('bat', Math.min(Math.max(0,n-5),6), 450);
     if (n>=8) add('ogre', Math.min(Math.max(0,Math.floor((n-6)/2)),5), 1300);
   }
-  return { wave:n, isBoss, hpScale, bossHpExtra, rewardScale, enemies:list };
+  return { wave:n, isBoss, hpScale, rewardScale, enemies:list };
 }
 
-/* Stufe 4 (Index 3) neu seit Umbau 072826: Der Playtest zeigte 6947-7214 Kohle
-   Ueberschuss am Spielende - es gab schlicht nichts mehr zu kaufen, sobald das
-   Baufeld voll war. Stufe 4 ist die erste von zwei neuen Kohle-Senken (die zweite
-   ist die Bombe, siehe BOMB_*). Der Sprung 3->4 ist bewusst groesser als 2->3,
-   damit er sich wie eine Belohnung anfuehlt und nicht wie eine Zahlenkorrektur.
-   Begrenzt durch MAX_LEVEL4_TOWERS, sonst waere das Brett am Ende komplett Stufe 4. */
 const TOWER_ORDER = ['schleuderer','frostturm','ofen','kanone','magier','scharfschuetze'];
 const TOWER_TYPES = {
   schleuderer: { name:'Schleuderer', emoji:'🏹', cost:50, kind:'shooter', color:'#C9A24B',
-    levels:[ {dmg:8,range:120,rate:1.4}, {dmg:14,range:120,rate:1.7,upgradeCost:40}, {dmg:22,range:140,rate:2.0,upgradeCost:70}, {dmg:38,range:150,rate:2.3,upgradeCost:260} ] },
+    levels:[ {dmg:8,range:120,rate:1.4}, {dmg:14,range:120,rate:1.7,upgradeCost:40}, {dmg:22,range:140,rate:2.0,upgradeCost:70} ] },
   frostturm: { name:'Frostturm', emoji:'❄️', cost:90, kind:'shooter', slow:true, color:'#4FB3A9',
-    levels:[ {dmg:4,range:110,rate:1.0,slowPct:0.40,slowDur:1.5}, {dmg:6,range:110,rate:1.0,slowPct:0.50,slowDur:1.5,upgradeCost:60}, {dmg:9,range:130,rate:1.0,slowPct:0.60,slowDur:2.0,upgradeCost:100}, {dmg:16,range:140,rate:1.0,slowPct:0.72,slowDur:2.5,upgradeCost:240} ] },
+    levels:[ {dmg:4,range:110,rate:1.0,slowPct:0.40,slowDur:1.5}, {dmg:6,range:110,rate:1.0,slowPct:0.50,slowDur:1.5,upgradeCost:60}, {dmg:9,range:130,rate:1.0,slowPct:0.60,slowDur:2.0,upgradeCost:100} ] },
   ofen: { name:'Ofen', emoji:'🔥', cost:140, kind:'spawner', color:'#E8742A',
-    levels:[ {childHp:20,interval:3.5,maxActive:2}, {childHp:32,interval:3.0,maxActive:3,upgradeCost:90}, {childHp:48,interval:2.5,maxActive:4,upgradeCost:150}, {childHp:85,interval:2.0,maxActive:6,upgradeCost:320} ] },
+    levels:[ {childHp:20,interval:3.5,maxActive:2}, {childHp:32,interval:3.0,maxActive:3,upgradeCost:90}, {childHp:48,interval:2.5,maxActive:4,upgradeCost:150} ] },
   kanone: { name:'Kanone', emoji:'💣', cost:150, kind:'shooter', splash:true, color:'#8A8F99',
-    levels:[ {dmg:25,range:130,rate:0.6,splashRadius:50}, {dmg:38,range:130,rate:0.6,splashRadius:60,upgradeCost:100}, {dmg:55,range:130,rate:0.8,splashRadius:75,upgradeCost:160}, {dmg:95,range:130,rate:0.95,splashRadius:95,upgradeCost:340} ] },
+    levels:[ {dmg:25,range:130,rate:0.6,splashRadius:50}, {dmg:38,range:130,rate:0.6,splashRadius:60,upgradeCost:100}, {dmg:55,range:130,rate:0.8,splashRadius:75,upgradeCost:160} ] },
   magier: { name:'Magier', emoji:'🧙', cost:170, kind:'shooter', slow:true, color:'#8E6FCE',
-    levels:[ {dmg:14,range:140,rate:1.2,slowPct:0.25,slowDur:1.0}, {dmg:20,range:140,rate:1.2,slowPct:0.35,slowDur:1.0,upgradeCost:110}, {dmg:28,range:160,rate:1.2,slowPct:0.45,slowDur:1.0,chain:true,upgradeCost:180}, {dmg:50,range:160,rate:1.2,slowPct:0.55,slowDur:1.0,chain:true,chainRadius:130,upgradeCost:360} ] },
+    levels:[ {dmg:14,range:140,rate:1.2,slowPct:0.25,slowDur:1.0}, {dmg:20,range:140,rate:1.2,slowPct:0.35,slowDur:1.0,upgradeCost:110}, {dmg:28,range:160,rate:1.2,slowPct:0.45,slowDur:1.0,chain:true,upgradeCost:180} ] },
   scharfschuetze: { name:'Scharfschütze', emoji:'🎯', cost:220, kind:'shooter', targeting:'strongest', color:'#D9455F',
-    levels:[ {dmg:70,range:220,rate:0.5}, {dmg:100,range:220,rate:0.5,upgradeCost:140}, {dmg:145,range:250,rate:0.65,upgradeCost:220}, {dmg:260,range:280,rate:0.75,upgradeCost:420} ] }
+    levels:[ {dmg:70,range:220,rate:0.5}, {dmg:100,range:220,rate:0.5,upgradeCost:140}, {dmg:145,range:250,rate:0.65,upgradeCost:220} ] }
 };
-/* Hoechstens so viele Tuerme duerfen gleichzeitig auf Stufe 4 stehen - global,
-   unabhaengig von Karte, Schwierigkeitsgrad und maxTowers. Bewusst eine einzige
-   Zahl statt einer Formel: leicht zu kommunizieren ("nie mehr als 3 Elite-Tuerme")
-   und leicht zu balancieren. */
-const MAX_LEVEL4_TOWERS = 3;
-const LEVEL4_INDEX = 3; // levels[3] == Stufe 4
-function level4Count(){
-  return state.towers.filter(t => t.level === LEVEL4_INDEX).length;
-}
-function level4LimitReached(){
-  return level4Count() >= MAX_LEVEL4_TOWERS;
-}
-/* Kaufbarer Einmal-Effekt (Umbau 072826): reine Kohle-Senke ohne Cooldown und ohne
-   Kaufbegrenzung. Sie soll die Spitzen abfangen (Bosswelle, durchgerutschte Gruppe)
-   und den Kohleberg aus Playtest-Befund 11.3 abtragen. Bewusst NICHT waehrend der
-   Pause ausloesbar - der bestehende Pause-Bau-Bug 5.4 soll sich hier nicht wiederholen. */
-const BOMB_COST = 200;
-const BOMB_DAMAGE = 150;
-const BOMB_RADIUS = 150;
-/* 25% statt 0% Lohn: die volle Streichung (Feedback 15) hat den Kohle-Rest zuverlaessig
-   gesenkt, aber die Bombe fuehlte sich dadurch nur noch wie eine Notbremse an. 25% gibt
-   einen Teil des Gefuehls "lohnt sich auch wirtschaftlich" zurueck, ohne dass sich die Bombe
-   erneut selbst refinanziert (25% von durchschnittlich 179 Bomben-Kills/Spiel aus Feedback 14
-   waeren rund 1237 Kohle bei 3000 Kohle Kaufkosten - weiterhin ein satter Nettoverlust,
-   also weiterhin eine echte Senke, nur keine reine Strafe mehr). Darius-Feedback nach
-   Playtest 17. */
-const BOMB_REWARD_PCT = 0.25;
-/* Kaufbegrenzung pro Spiel statt Cooldown: im Nachtest raeumten 5-6 Bomben in Folge
-   eine Welle in 7-9s statt 18-24s leer (offensiver Einsatz 33-43 Bomben/Spiel), waehrend
-   massvoller Einsatz (11-15 Bomben/Spiel) die Wellen spuerbar, aber nicht trivial
-   verkuerzte. 15 uebernimmt die obere Grenze des massvollen Bereichs unveraendert und
-   kappt den Spam-Bereich auf weniger als die Haelfte. (Darius-Feedback nach Playtest 12) */
-const BOMB_MAX_PER_GAME = 15;
-/* Cooldown zusaetzlich zum Spiel-Limit: das Limit deckelt nur das Gesamtbudget, verhindert
-   aber nicht, dass mehrere Bomben sofort hintereinander gezuendet werden und eine Welle in
-   Sekunden leerraeumen (Chainen). Der Cooldown laeuft in state.playTime (Spielzeit), skaliert
-   also mit state.speedMultiplier - bei 2x Tempo sind 10 Spielsekunden 5 reale Sekunden, passt
-   damit zur beschleunigten Wellendauer. Darius-Feedback nach Playtest 16. */
-const BOMB_COOLDOWN = 6;
-/* Von 10 auf 6 Sekunden gesenkt, um die Bombe insgesamt wieder attraktiver zu machen
-   (Darius-Wunsch "verbessern"). Bewusst am Cooldown gedreht statt am Radius: der Radius
-   bestimmt die Wucht eines einzelnen Wurfs (Risiko, dichte Wellen zu trivialisieren), der
-   Cooldown nur das Nutzungstempo - leichter zu kontrollieren und leichter zurueckzudrehen,
-   falls Chainen wieder zum Problem wird (siehe Feedback 17 zur urspruenglichen Begruendung
-   von 10s). */
-
 function sellRefund(totalInvested){ return Math.floor(totalInvested*0.6); }
 const KEY_TO_TOWER = {'1':'schleuderer','2':'frostturm','3':'ofen','4':'kanone','5':'magier','6':'scharfschuetze'};
 
@@ -917,9 +754,6 @@ const Sound = (() => {
     sell(){ beep(300, 0.12, 'sine', 0.05, 160); },
     waveStart(){ beep(220, 0.22, 'sawtooth', 0.06, 440); },
     leak(){ beep(160, 0.16, 'square', 0.06, 90); },
-    /* Bombe: tiefer, langer Abwaerts-Sweep - deutlich wuchtiger als place(), damit
-       der Einmal-Effekt hoerbar etwas anderes ist als ein Turmbau. */
-    bomb(){ beep(180, 0.35, 'sawtooth', 0.09, 40); beep(90, 0.45, 'square', 0.06, 30); },
     lose(){ beep(200, 0.5, 'sawtooth', 0.07, 60); },
     win(){ beep(523, 0.18, 'sine', 0.06, 784); }
   };
@@ -933,7 +767,6 @@ const state = {
   mapKey: null,
   waypoints: [],
   pathCells: new Set(),
-  blockedCells: new Set(),
   buildable: new Set(),
 
   kohle: STARTING_KOHLE,
@@ -959,9 +792,6 @@ const state = {
   selectedBuildType: null,   // Turmtyp der gerade platziert wird
   selectedTowerId: null,     // id eines platzierten, ausgewählten Turms
   hoverCell: null,
-  bombArmed: false,          // Bombe gekauft-und-scharf: naechster Canvas-Klick zuendet
-  bombsUsed: 0,
-  bombCooldownUntil: 0,      // state.playTime, bis zu dem die naechste Bombe gesperrt ist
 
   paused: false,
   speedMultiplier: 1,
@@ -992,9 +822,6 @@ function resetRunState(){
   state.spawnQueue = [];
   state.selectedBuildType = null;
   state.selectedTowerId = null;
-  state.bombArmed = false;
-  state.bombsUsed = 0;
-  state.bombCooldownUntil = 0;
   state.paused = false;
   state.speedMultiplier = 1;
 }
@@ -1021,20 +848,10 @@ const dom = {
   livesValue: $('livesValue'),
   livesPill: $('livesPill'),
   waveValue: $('waveValue'),
-  towerValue: $('towerValue'),
-  bombBtn: $('bombBtn'),
   speedBtn: $('speedBtn'),
   soundBtn: $('soundBtn'),
   pauseBtn: $('pauseBtn'),
   settingsBtn: $('settingsBtn'),
-  feedbackBtn: $('feedbackBtn'),
-  feedbackModal: $('feedbackModal'),
-  feedbackForm: $('feedbackForm'),
-  feedbackText: $('feedbackText'),
-  feedbackEmail: $('feedbackEmail'),
-  feedbackStatus: $('feedbackStatus'),
-  feedbackSendBtn: $('feedbackSendBtn'),
-  closeFeedbackBtn: $('closeFeedbackBtn'),
 
   waveBar: $('waveBar'),
   waveBarText: $('waveBarText'),
@@ -1238,9 +1055,6 @@ function buildBuildMenu(){
 
 function selectBuildType(key){
   if (state.gameEnded) return;
-  /* Bauen und Bombe schliessen sich aus - sonst waere unklar, was der naechste
-     Canvas-Klick tut. */
-  if (state.bombArmed){ state.bombArmed = false; syncBombBtnUI(); }
   if (state.selectedBuildType === key){
     state.selectedBuildType = null;
   } else {
@@ -1258,7 +1072,7 @@ function syncBuildMenuUI(){
     const key = card.dataset.tower;
     const def = TOWER_TYPES[key];
     card.classList.toggle('selected', state.selectedBuildType === key);
-    card.classList.toggle('unaffordable', state.kohle < def.cost || towerLimitReached());
+    card.classList.toggle('unaffordable', state.kohle < def.cost);
   });
 }
 
@@ -1276,7 +1090,6 @@ function startGame(mapKey){
   state.mapKey = mapKey;
   state.waypoints = pathToPixels(def.points);
   state.pathCells = rasterizePath(def.points);
-  state.blockedCells = new Set((def.blocked || []).map(([c,r]) => c+','+r));
   resetRunState();
   showScreen('game');
   setupResizeObserver();
@@ -1284,17 +1097,8 @@ function startGame(mapKey){
   syncBuildMenuUI();
   syncSelectionPanel();
   updateTopbarUI();
-  /* Endete die vorige Runde mitten in einer Welle, blieb #waveBar von dort auf
-     "hidden" stehen (nur das Wellenende-Ende entfernt die Klasse). Ohne dieses
-     Zuruecksetzen startete die naechste Karte ohne sichtbare Bauphase-Leiste und
-     der Countdown lief unbemerkt (Playtest-Befund 5.2). */
-  dom.waveBar.classList.remove('hidden');
   updateWaveBarUI();
   dom.gameOverModal.classList.remove('show');
-  /* resetRunState() setzt state.speedMultiplier intern auf 1, aber das Button-Label
-     wird sonst nur im Klick-Handler aktualisiert - nach einem Kartenwechsel zeigte
-     der Button weiter den Tempowert der Vorrunde an (Playtest-Befund 5.3). */
-  dom.speedBtn.textContent = state.speedMultiplier + '×';
   Sound.unlock();
   Sound.startMusic();
 }
@@ -1302,20 +1106,7 @@ function startGame(mapKey){
 function isCellFree(col, row){
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
   if (state.pathCells.has(col+','+row)) return false;
-  if (state.blockedCells.has(col+','+row)) return false;
   return !state.towers.some(t => t.col === col && t.row === row);
-}
-
-function maxTowers(){
-  /* Vor dem ersten Kartenstart ist mapKey null - dann gibt es kein Limit zu pruefen. */
-  const def = MAPS[state.mapKey];
-  if (!def) return Infinity;
-  /* Seit Umbau 072826 kartenspezifisch (Pflichtdeckung + Reserve 3) statt fest pro
-     Schwierigkeitsgrad - siehe Kommentar bei DIFFICULTY_TIERS/MAPS. */
-  return def.maxTowers;
-}
-function towerLimitReached(){
-  return state.towers.length >= maxTowers();
 }
 
 /* =========================================================
@@ -1403,17 +1194,13 @@ function spawnEnemy(type){
   const base = ENEMY_TYPES[type];
   const wave = state.currentWaveData;
   const start = state.waypoints[0];
-  /* bossHpExtra greift nur fuer Bosse (siehe generateWave) - die begleitenden Goblins
-     einer Bosswelle skalieren weiter nur ueber hpScale. */
-  const bossExtra = (type === 'boss') ? (wave.bossHpExtra || 1) : 1;
-  const scaledHp = base.hp * wave.hpScale * bossExtra;
   state.enemies.push({
     id: state.nextEntityId++, type, name: base.name, emoji: base.emoji,
-    hp: scaledHp, maxHp: scaledHp,
+    hp: base.hp * wave.hpScale, maxHp: base.hp * wave.hpScale,
     speed: base.speed, reward: Math.round(base.reward * wave.rewardScale),
     livesCost: base.livesCost,
     wpIndex: 0, x: start.x, y: start.y, progress: 0,
-    slowUntil: 0, slowPct: 0, hitFlash: 0, angle: 0
+    slowUntil: 0, slowPct: 0, hitFlash: 0
   });
 }
 
@@ -1574,27 +1361,17 @@ function triggerVictory(){
 /* =========================================================
    SCHADEN, TÜRME, PROJEKTILE, GLUTWICHTE
    ========================================================= */
-function applyDamageToEnemy(e, amount, source){
+function applyDamageToEnemy(e, amount){
   if (e.hp <= 0) return;
   e.hp -= amount;
   e.hitFlash = 0.12;
   if (e.hp <= 0){
     e.hp = 0;
-    /* Gegner, die durch die Bombe sterben, zahlen nur BOMB_REWARD_PCT ihres Lohns (siehe
-       BOMB_REWARD_PCT fuer die Herleitung von 25%). Voller Lohn bei jedem anderen Schaden
-       haette die Bombe selbst refinanziert (Feedback 14: 15 Bomben kosteten 3000, spuelten
-       4954 zurueck). source==='bomb' setzt ausschliesslich detonateBomb(); Turmschuss,
-       Kanonen-Splash, Magier-Kette und Glutwicht lassen source undefiniert und zahlen
-       weiterhin voll aus (rewardMult 1). */
-    const rewardMult = source === 'bomb' ? BOMB_REWARD_PCT : 1;
-    const paidAmount = Math.round(e.reward * rewardMult);
-    if (paidAmount > 0){
-      state.kohle += paidAmount;
-      state.totalKohleEarned += paidAmount;
-      Sound.coin();
-    }
+    state.kohle += e.reward;
+    state.totalKohleEarned += e.reward;
     state.totalKills++;
-    spawnKillEffect(e, paidAmount, source === 'bomb');
+    spawnKillEffect(e);
+    Sound.coin();
   }
 }
 
@@ -1611,7 +1388,6 @@ function updateEnemies(dt){
     while (remaining > 0 && e.wpIndex < state.waypoints.length - 1){
       const target = state.waypoints[e.wpIndex + 1];
       const d = dist(e, target);
-      e.angle = Math.atan2(target.y - e.y, target.x - e.x);
       if (d <= remaining){
         remaining -= d;
         e.progress += d;
@@ -1670,11 +1446,7 @@ function updateTowers(dt){
       x: tw.x, y: tw.y, targetId: target.id, speed: 420,
       dmg: lvl.dmg, splashRadius: lvl.splashRadius || 0,
       slowPct: lvl.slowPct, slowDur: lvl.slowDur, chain: !!lvl.chain,
-      /* Ketten-Radius war bis 072826 hart mit 80 in updateProjectiles verdrahtet
-         (Playtest-Befund 2.4 "Magier-Kette zu klein"). Jetzt pro Stufe konfigurierbar;
-         Stufe 1-3 haben kein chainRadius und behalten damit die alten 80. */
-      chainRadius: lvl.chainRadius || 80,
-      color: def.color, kind: tw.type, angle: 0, trail: []
+      color: def.color
     });
     tw.cooldown = 1 / lvl.rate;
     Sound.shoot();
@@ -1699,8 +1471,7 @@ function updateProjectiles(dt){
         }
       }
       if (p.chain){
-        const chainR = p.chainRadius || 80;
-        const other = state.enemies.find(e => e.id !== target.id && e.hp > 0 && dist(target, e) <= chainR);
+        const other = state.enemies.find(e => e.id !== target.id && e.hp > 0 && dist(target, e) <= 80);
         if (other){
           applyDamageToEnemy(other, Math.round(p.dmg*0.5));
           other.slowUntil = state.playTime + 1.0;
@@ -1709,9 +1480,6 @@ function updateProjectiles(dt){
         }
       }
     } else {
-      p.angle = Math.atan2(target.y - p.y, target.x - p.x);
-      p.trail.push({ x:p.x, y:p.y });
-      if (p.trail.length > 5) p.trail.shift();
       p.x += (target.x - p.x)/d*step;
       p.y += (target.y - p.y)/d*step;
       remaining.push(p);
@@ -1750,16 +1518,8 @@ function updateImps(dt){
 function spawnFloatText(x,y,text,color){
   state.floatTexts.push({ x, y, text, color, life:1.0, maxLife:1.0 });
 }
-/* paidAmount ist der tatsaechlich ausgezahlte Betrag (voll bei Turm/Splash/Kette/Glutwicht,
-   25 % bei Bombe, siehe BOMB_REWARD_PCT). isBomb faerbt den Text nur um, damit ein reduzierter
-   Bomben-Lohn optisch erkennbar bleibt, ohne wie bei der frueheren 0%-Fassung zwei
-   widersprechende Texte uebereinander zu zeigen (Feedback 14.4). Falls paidAmount durch eine
-   kuenftige Anpassung wieder auf 0 faellt, zeigt es weiterhin "kein Lohn" statt "+0". Der
-   Todes-Funkeneffekt bleibt in allen Faellen unveraendert. */
-function spawnKillEffect(e, paidAmount, isBomb){
-  const text = paidAmount > 0 ? '+'+paidAmount : 'kein Lohn';
-  const color = paidAmount > 0 ? (isBomb ? '#E8742A' : '#F0B429') : '#8A8F99';
-  spawnFloatText(e.x, e.y-14, text, color);
+function spawnKillEffect(e){
+  spawnFloatText(e.x, e.y-14, '+'+e.reward, '#F0B429');
   for (let i=0;i<6;i++){
     const ang = Math.random()*Math.PI*2, spd = 30+Math.random()*50;
     state.particles.push({ type:'ember', x:e.x, y:e.y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-40, life:0.6, maxLife:0.6 });
@@ -1779,237 +1539,6 @@ function updateParticles(dt){
 }
 
 /* =========================================================
-   GEGNER-FIGUREN (Vektorgrafik statt Emoji - einheitliches Aussehen
-   auf allen Plattformen, Blickrichtung folgt e.angle aus updateEnemies)
-   ========================================================= */
-const ENEMY_VISUAL = {
-  slime:  { hitR:12 },
-  goblin: { hitR:14 },
-  bat:    { hitR:12 },
-  ogre:   { hitR:18 },
-  boss:   { hitR:24 }
-};
-
-function drawSlime(c, e){
-  const r = 11;
-  c.fillStyle = 'rgba(58,163,76,0.92)';
-  c.beginPath();
-  c.moveTo(-r, 4);
-  c.quadraticCurveTo(-r, -r, 0, -r-2);
-  c.quadraticCurveTo(r, -r, r, 4);
-  c.quadraticCurveTo(r, 8, 0, 9);
-  c.quadraticCurveTo(-r, 8, -r, 4);
-  c.closePath();
-  c.fill();
-  c.strokeStyle='#245C30'; c.lineWidth=1.5; c.stroke();
-  c.fillStyle='rgba(255,255,255,0.25)';
-  c.beginPath(); c.ellipse(-4,-6,3,2,0,0,Math.PI*2); c.fill();
-  c.fillStyle='#14110F';
-  c.beginPath(); c.arc(-3,-2,1.6,0,Math.PI*2); c.fill();
-  c.beginPath(); c.arc(4,-2,1.6,0,Math.PI*2); c.fill();
-}
-
-function drawGoblin(c, e){
-  // Oni-/Tengu-Maske statt generischem gruenen Fantasy-Goblin - naeher am
-  // urspruenglichen 👺-Emoji-Charakter (rote Haut, buschige Brauen, lange Nase),
-  // als volle Laeuferfigur statt reiner Maske
-  c.strokeStyle='#5A2A1A'; c.lineWidth=3; c.lineCap='round';
-  c.beginPath(); c.moveTo(-7,-1); c.lineTo(-11,6); c.stroke();
-  c.beginPath(); c.moveTo(6,-2); c.lineTo(11,3); c.stroke();
-  c.beginPath(); c.moveTo(-4,8); c.lineTo(-5,14); c.stroke();
-  c.beginPath(); c.moveTo(3,8); c.lineTo(4,14); c.stroke();
-  c.fillStyle='#8B3A22';
-  c.beginPath(); c.ellipse(-2,3,8,9,0.1,0,Math.PI*2); c.fill();
-  c.fillStyle='#C1440E';
-  c.beginPath(); c.arc(4,-7,9,0,Math.PI*2); c.fill();
-  c.beginPath(); c.moveTo(-3,-12); c.lineTo(-8,-17); c.lineTo(-2,-8); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(9,-13); c.lineTo(14,-16); c.lineTo(10,-7); c.closePath(); c.fill();
-  c.fillStyle='#EDE3D3';
-  c.beginPath(); c.moveTo(-1,-14); c.lineTo(-3,-20); c.lineTo(1,-15); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(6,-15); c.lineTo(8,-21); c.lineTo(9,-15); c.closePath(); c.fill();
-  c.strokeStyle='#EDE3D3'; c.lineWidth=2; c.lineCap='round';
-  c.beginPath(); c.moveTo(-1,-10); c.lineTo(3,-12); c.stroke();
-  c.beginPath(); c.moveTo(6,-12); c.lineTo(10,-10); c.stroke();
-  c.fillStyle='#14110F';
-  c.beginPath(); c.arc(2,-8,1.4,0,Math.PI*2); c.fill();
-  c.beginPath(); c.arc(8,-8,1.4,0,Math.PI*2); c.fill();
-  c.fillStyle='#8B3A22';
-  c.beginPath(); c.moveTo(11,-7); c.lineTo(18,-5); c.lineTo(11,-4); c.closePath(); c.fill();
-  c.strokeStyle='#5A2A1A'; c.lineWidth=1.2;
-  c.beginPath(); c.moveTo(1,-2); c.lineTo(9,-2); c.stroke();
-}
-
-function drawBat(c, e){
-  const flap = Math.sin(state.playTime*14 + e.id)*0.6;
-  c.fillStyle='#3B2E52';
-  c.beginPath();
-  c.moveTo(0,0);
-  c.quadraticCurveTo(-14, -6-flap*6, -18, 2+flap*4);
-  c.quadraticCurveTo(-8, 2, 0, 0);
-  c.closePath(); c.fill();
-  c.beginPath();
-  c.moveTo(0,0);
-  c.quadraticCurveTo(14, -6-flap*6, 18, 2+flap*4);
-  c.quadraticCurveTo(8, 2, 0, 0);
-  c.closePath(); c.fill();
-  c.fillStyle='#4B3A66';
-  c.beginPath(); c.ellipse(0,0,6,7,0,0,Math.PI*2); c.fill();
-  c.fillStyle='#E8395B';
-  c.beginPath(); c.arc(-2,-2,1.3,0,Math.PI*2); c.fill();
-  c.beginPath(); c.arc(2,-2,1.3,0,Math.PI*2); c.fill();
-}
-
-function drawOgre(c, e){
-  c.strokeStyle='#6E5640'; c.lineWidth=5; c.lineCap='round';
-  c.beginPath(); c.moveTo(-13,-4); c.lineTo(-18,6); c.stroke();
-  c.beginPath(); c.moveTo(13,-4); c.lineTo(18,6); c.stroke();
-  c.fillStyle='#8B6F52';
-  roundRect(c,-13,-18,26,26,6); c.fill();
-  c.strokeStyle='#5A4530'; c.lineWidth=1.5; roundRect(c,-13,-18,26,26,6); c.stroke();
-  c.fillStyle='#5A4530';
-  roundRect(c,-11,-15,22,5,2); c.fill();
-  c.fillStyle='#C1440E';
-  c.beginPath(); c.arc(-5,-8,2,0,Math.PI*2); c.fill();
-  c.beginPath(); c.arc(5,-8,2,0,Math.PI*2); c.fill();
-  c.fillStyle='#EDE3D3';
-  c.beginPath(); c.moveTo(-5,2); c.lineTo(-7,8); c.lineTo(-3,3); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(5,2); c.lineTo(7,8); c.lineTo(3,3); c.closePath(); c.fill();
-}
-
-function drawDragon(c, e){
-  // Naeher am 🐉-Emoji: gruene Schuppen statt rot, cremefarbener Bauch,
-  // geschwungene Hoerner + Barthaare (Whiskers) als Signature-Merkmale,
-  // kleine angelegte Fluegel statt grosser Flugfluegel (Emoji sitzt eher, als dass es fliegt)
-  const flap = Math.sin(state.playTime*6 + e.id)*0.4;
-  c.fillStyle='rgba(47,122,58,0.9)';
-  c.beginPath();
-  c.moveTo(-6,-4);
-  c.quadraticCurveTo(-20,-10-flap*4, -22, 2+flap*3);
-  c.quadraticCurveTo(-12,0,-6,0);
-  c.closePath(); c.fill();
-  c.fillStyle='#2F7A3A';
-  c.beginPath(); c.ellipse(0,3,14,10,0,0,Math.PI*2); c.fill();
-  c.fillStyle='#EDE3D3';
-  c.beginPath(); c.ellipse(-1,7,9,5,0,0,Math.PI*2); c.fill();
-  c.fillStyle='#F0B429';
-  for (let i=-1;i<=2;i++){
-    c.beginPath(); c.moveTo(-8+i*7,-6); c.lineTo(-5+i*7,-13); c.lineTo(-2+i*7,-6); c.closePath(); c.fill();
-  }
-  c.fillStyle='#2F7A3A';
-  c.beginPath(); c.ellipse(15,-3,7,6,0,0,Math.PI*2); c.fill();
-  c.strokeStyle='#EDE3D3'; c.lineWidth=2; c.lineCap='round';
-  c.beginPath(); c.moveTo(13,-8); c.quadraticCurveTo(10,-14,14,-16); c.stroke();
-  c.beginPath(); c.moveTo(18,-8); c.quadraticCurveTo(21,-13,19,-16); c.stroke();
-  c.strokeStyle='rgba(237,227,211,0.85)'; c.lineWidth=1;
-  c.beginPath(); c.moveTo(20,-1); c.quadraticCurveTo(26,-2,29,-5); c.stroke();
-  c.beginPath(); c.moveTo(20,1); c.quadraticCurveTo(26,3,28,6); c.stroke();
-  c.fillStyle='#256030';
-  c.beginPath(); c.moveTo(20,-3); c.lineTo(25,-1); c.lineTo(20,1); c.closePath(); c.fill();
-  c.fillStyle='#F0B429';
-  c.beginPath(); c.arc(17,-4,1.6,0,Math.PI*2); c.fill();
-}
-
-const ENEMY_DRAW = { slime:drawSlime, goblin:drawGoblin, bat:drawBat, ogre:drawOgre, boss:drawDragon };
-
-function drawEnemyFigure(c, e, bob){
-  const facingLeft = Math.cos(e.angle||0) < 0;
-  c.save();
-  c.translate(e.x, e.y + bob);
-  if (facingLeft) c.scale(-1,1);
-  (ENEMY_DRAW[e.type] || drawSlime)(c, e);
-  c.restore();
-}
-
-/* =========================================================
-   PROJEKTIL-STILE (pro Turmtyp statt generischer Kreis) - Blickwinkel
-   und kurzer Bewegungs-Trail kommen aus updateProjectiles (p.angle/p.trail)
-   ========================================================= */
-function drawTrailLine(c, p, strokeStyle, lineWidth){
-  if (!p.trail.length) return;
-  c.strokeStyle = strokeStyle; c.lineWidth = lineWidth;
-  c.beginPath(); c.moveTo(p.trail[0].x, p.trail[0].y);
-  for (let i=1;i<p.trail.length;i++) c.lineTo(p.trail[i].x, p.trail[i].y);
-  c.lineTo(p.x, p.y); c.stroke();
-}
-
-function drawArrowProjectile(c, p){
-  drawTrailLine(c, p, 'rgba(201,162,75,0.35)', 1.5);
-  c.save();
-  c.translate(p.x, p.y); c.rotate(p.angle||0);
-  c.fillStyle='#C9A24B';
-  c.beginPath(); c.moveTo(7,0); c.lineTo(-3,-3); c.lineTo(-3,3); c.closePath(); c.fill();
-  c.strokeStyle='#8A6B2E'; c.lineWidth=1.5;
-  c.beginPath(); c.moveTo(-3,0); c.lineTo(-9,0); c.stroke();
-  c.restore();
-}
-
-function drawFrostProjectile(c, p){
-  p.trail.forEach((t,i) => {
-    c.globalAlpha = 0.12 + 0.12*i; c.fillStyle='#BDEDE8';
-    c.beginPath(); c.arc(t.x,t.y,2,0,Math.PI*2); c.fill();
-  });
-  c.globalAlpha = 1;
-  c.save();
-  c.translate(p.x, p.y); c.rotate(p.angle||0);
-  c.fillStyle='#8FE0D8';
-  c.beginPath(); c.moveTo(6,0); c.lineTo(0,-4); c.lineTo(-5,0); c.lineTo(0,4); c.closePath(); c.fill();
-  c.strokeStyle='#E8FFFC'; c.lineWidth=1; c.stroke();
-  c.restore();
-}
-
-function drawCannonProjectile(c, p){
-  p.trail.forEach((t,i) => {
-    c.globalAlpha = 0.10 + 0.08*i; c.fillStyle='#555';
-    c.beginPath(); c.arc(t.x,t.y,3+i*0.3,0,Math.PI*2); c.fill();
-  });
-  c.globalAlpha = 1;
-  const grad = c.createRadialGradient(p.x-1.5,p.y-1.5,0.5,p.x,p.y,5);
-  grad.addColorStop(0,'#9AA0A8'); grad.addColorStop(1,'#2B2E33');
-  c.fillStyle = grad;
-  c.beginPath(); c.arc(p.x,p.y,5,0,Math.PI*2); c.fill();
-}
-
-function drawArcaneProjectile(c, p){
-  p.trail.forEach((t,i) => {
-    c.globalAlpha = 0.08 + 0.1*i; c.fillStyle='#8E6FCE';
-    c.beginPath(); c.arc(t.x,t.y,3,0,Math.PI*2); c.fill();
-  });
-  c.globalAlpha = 1;
-  const glow = c.createRadialGradient(p.x,p.y,0,p.x,p.y,9);
-  glow.addColorStop(0,'rgba(180,140,255,0.55)'); glow.addColorStop(1,'rgba(180,140,255,0)');
-  c.fillStyle = glow;
-  c.beginPath(); c.arc(p.x,p.y,9,0,Math.PI*2); c.fill();
-  c.fillStyle='#B48CFF';
-  c.beginPath(); c.arc(p.x,p.y,3.5,0,Math.PI*2); c.fill();
-  c.strokeStyle='rgba(180,140,255,0.6)'; c.lineWidth=1;
-  c.beginPath(); c.ellipse(p.x,p.y,6,2.5,state.playTime*10,0,Math.PI*2); c.stroke();
-}
-
-function drawSniperProjectile(c, p){
-  drawTrailLine(c, p, 'rgba(217,69,95,0.5)', 1.5);
-  c.save();
-  c.translate(p.x, p.y); c.rotate(p.angle||0);
-  c.fillStyle='#FFD9DE';
-  c.beginPath(); c.ellipse(0,0,4,1.3,0,0,Math.PI*2); c.fill();
-  c.restore();
-}
-
-const PROJECTILE_DRAW = {
-  schleuderer: drawArrowProjectile,
-  frostturm: drawFrostProjectile,
-  kanone: drawCannonProjectile,
-  magier: drawArcaneProjectile,
-  scharfschuetze: drawSniperProjectile
-};
-
-function drawProjectile(c, p){
-  const draw = PROJECTILE_DRAW[p.kind];
-  if (draw){ draw(c, p); return; }
-  c.beginPath(); c.arc(p.x,p.y,4,0,Math.PI*2);
-  c.fillStyle = p.color || '#F0B429'; c.fill();
-}
-
-/* =========================================================
    RENDERING
    ========================================================= */
 function roundRect(c, x, y, w, h, r){
@@ -2022,56 +1551,6 @@ function roundRect(c, x, y, w, h, r){
   c.closePath();
 }
 
-/* Geroellfeld: nicht bebaubar, liegt nicht auf dem Weg. Die Form wird deterministisch
-   aus col/row abgeleitet - mit Math.random() wuerde jedes Feld pro Bild neu zappeln. */
-function drawRubbleCell(c, col, row){
-  const x = col*CELL, y = row*CELL;
-  const seed = (col*73856093 ^ row*19349663) >>> 0;
-  const rnd = (i) => (((seed >> (i*3)) & 0xFF) / 255);
-
-  c.save();
-  c.beginPath(); c.rect(x, y, CELL, CELL); c.clip();
-
-  c.fillStyle = '#241C16';
-  c.fillRect(x, y, CELL, CELL);
-
-  // drei bis vier kantige Broecken in leicht wechselnden Grautoenen
-  const rocks = [
-    { cx:0.30, cy:0.34, r:0.24, tone:'#4A4038' },
-    { cx:0.66, cy:0.42, r:0.20, tone:'#3B332C' },
-    { cx:0.44, cy:0.70, r:0.22, tone:'#443A32' },
-    { cx:0.78, cy:0.74, r:0.15, tone:'#352E28' }
-  ];
-  rocks.forEach((rk, i) => {
-    const jx = (rnd(i) - 0.5) * 0.10, jy = (rnd(i+2) - 0.5) * 0.10;
-    const px = x + (rk.cx + jx) * CELL, py = y + (rk.cy + jy) * CELL;
-    const rad = rk.r * CELL;
-    c.beginPath();
-    for (let k = 0; k < 6; k++){
-      const a = (Math.PI*2/6)*k + rnd(i+k)*0.35;
-      const rr = rad * (0.72 + rnd(i+k+1)*0.38);
-      const vx = px + Math.cos(a)*rr, vy = py + Math.sin(a)*rr*0.82;
-      if (k === 0) c.moveTo(vx, vy); else c.lineTo(vx, vy);
-    }
-    c.closePath();
-    c.fillStyle = rk.tone;
-    c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.45)';
-    c.lineWidth = 1;
-    c.stroke();
-  });
-
-  // schwacher Glutschimmer aus den Fugen, passend zur Farbwelt des Spiels
-  c.globalAlpha = 0.13;
-  c.fillStyle = '#E8742A';
-  c.fillRect(x, y + CELL*0.80, CELL, CELL*0.20);
-  c.globalAlpha = 1;
-
-  c.strokeStyle = 'rgba(232,116,42,0.16)';
-  c.strokeRect(x+0.5, y+0.5, CELL-1, CELL-1);
-  c.restore();
-}
-
 function render(){
   ctx.clearRect(0,0,GRID_W,GRID_H);
 
@@ -2080,14 +1559,12 @@ function render(){
     for (let col=0; col<COLS; col++){
       const key = col+','+row;
       const isPath = state.pathCells.has(key);
-      const isBlocked = state.blockedCells.has(key);
       ctx.fillStyle = isPath ? '#3A2C20' : ((row+col)%2===0 ? '#1C1712' : '#1A1510');
       ctx.fillRect(col*CELL, row*CELL, CELL, CELL);
       if (isPath){
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.strokeRect(col*CELL+0.5, row*CELL+0.5, CELL-1, CELL-1);
       }
-      if (isBlocked) drawRubbleCell(ctx, col, row);
     }
   }
   // dezentes Grid für Baubereich
@@ -2103,23 +1580,12 @@ function render(){
   ctx.fillStyle='rgba(240,180,41,0.25)'; ctx.beginPath(); ctx.arc(baseP.x,baseP.y,22,0,Math.PI*2); ctx.fill();
   ctx.fillText('🏰', baseP.x, baseP.y);
 
-  // Bomben-Zielvorschau (Wirkradius am Mauszeiger)
-  if (state.bombArmed && state.hoverCell){
-    const bc = cellCenter(state.hoverCell.col, state.hoverCell.row);
-    ctx.beginPath(); ctx.arc(bc.x, bc.y, BOMB_RADIUS, 0, Math.PI*2);
-    ctx.fillStyle='rgba(193,68,14,0.16)'; ctx.fill();
-    ctx.strokeStyle='rgba(240,180,41,0.8)'; ctx.lineWidth=2; ctx.setLineDash([6,5]); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle='#000'; ctx.fillText('💣', bc.x, bc.y);
-  }
-
   // Platzierungs-Vorschau (Ghost + Reichweite)
   if (state.selectedBuildType && state.hoverCell){
     const { col, row } = state.hoverCell;
     const def = TOWER_TYPES[state.selectedBuildType];
     const c = cellCenter(col,row);
-    const valid = isCellFree(col,row) && state.kohle >= def.cost && !towerLimitReached();
+    const valid = isCellFree(col,row) && state.kohle >= def.cost;
     ctx.beginPath(); ctx.arc(c.x,c.y, def.levels[0].range || 90, 0, Math.PI*2);
     ctx.fillStyle = valid ? 'rgba(240,180,41,0.10)' : 'rgba(193,68,14,0.14)';
     ctx.fill();
@@ -2142,35 +1608,14 @@ function render(){
       ctx.fillStyle='rgba(240,180,41,0.08)'; ctx.fill();
       ctx.strokeStyle='rgba(240,180,41,0.5)'; ctx.lineWidth=1.5; ctx.stroke();
     }
-    /* Stufe 4 bekommt einen goldenen, pulsierenden Sockel statt des dunklen Kreises,
-       damit Elite-Tuerme auf einen Blick vom Rest zu unterscheiden sind (Umbau 072826).
-       Der Turm-Emoji bleibt, damit der Typ weiter erkennbar ist. */
-    const isElite = tw.level === LEVEL4_INDEX;
-    if (isElite){
-      const pulse = 0.5 + 0.5*Math.sin(state.playTime*3 + tw.id);
-      ctx.beginPath(); ctx.arc(tw.x,tw.y,24+pulse*2,0,Math.PI*2);
-      ctx.fillStyle='rgba(240,180,41,'+(0.10+pulse*0.10).toFixed(3)+')'; ctx.fill();
-      ctx.beginPath(); ctx.arc(tw.x,tw.y,20,0,Math.PI*2);
-      ctx.fillStyle='#5A4416'; ctx.fill();
-      ctx.strokeStyle = isSelected ? '#FFF3C4' : '#F0B429';
-      ctx.lineWidth=3; ctx.stroke();
-    } else {
-      ctx.beginPath(); ctx.arc(tw.x,tw.y,20,0,Math.PI*2);
-      ctx.fillStyle='#2A2219'; ctx.fill();
-      ctx.strokeStyle = isSelected ? '#F0B429' : 'rgba(232,116,42,0.5)';
-      ctx.lineWidth=2; ctx.stroke();
-    }
+    ctx.beginPath(); ctx.arc(tw.x,tw.y,20,0,Math.PI*2);
+    ctx.fillStyle='#2A2219'; ctx.fill();
+    ctx.strokeStyle = isSelected ? '#F0B429' : 'rgba(232,116,42,0.5)';
+    ctx.lineWidth=2; ctx.stroke();
     ctx.font='22px sans-serif';
     ctx.fillStyle='#000';
     ctx.fillText(def.emoji, tw.x, tw.y);
-    if (isElite){
-      // Kronen-Abzeichen statt Stufenziffer - groesser, damit es aus der Distanz liest.
-      ctx.beginPath(); ctx.arc(tw.x+15, tw.y-15, 11, 0, Math.PI*2);
-      ctx.fillStyle='#F0B429'; ctx.fill();
-      ctx.strokeStyle='#14110F'; ctx.lineWidth=1.5; ctx.stroke();
-      ctx.font='13px sans-serif';
-      ctx.fillText('👑', tw.x+15, tw.y-14);
-    } else if (tw.level>0){
+    if (tw.level>0){
       ctx.font='10px sans-serif';
       ctx.fillStyle='#14110F';
       ctx.beginPath(); ctx.arc(tw.x+14, tw.y-14, 8, 0, Math.PI*2); ctx.fillStyle='#F0B429'; ctx.fill();
@@ -2181,20 +1626,18 @@ function render(){
   // Gegner
   for (const e of state.enemies){
     if (e.hp <= 0) continue; // stirbt gerade diesen Frame, wird im nächsten Update entfernt
-    const vis = ENEMY_VISUAL[e.type] || ENEMY_VISUAL.slime;
-    const bob = Math.sin(state.playTime*6 + e.id) * 2;
-    const facingLeft = Math.cos(e.angle||0) < 0;
-    // Kohle-Rucksack (auf der Rueckseite der Laufrichtung, hinter der Figur)
-    const packX = e.x + (facingLeft ? 8 : -8) - 6;
+    // Kohle-Rucksack (kleiner Sack hinter der Figur)
     ctx.fillStyle='#6B4A2A';
-    roundRect(ctx, packX, e.y-2+bob, 12, 13, 3); ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; roundRect(ctx, packX, e.y-2+bob, 12, 13, 3); ctx.stroke();
+    roundRect(ctx, e.x-9, e.y-2, 12, 13, 3); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; roundRect(ctx, e.x-9, e.y-2, 12, 13, 3); ctx.stroke();
     // Figur
-    drawEnemyFigure(ctx, e, bob);
+    ctx.font='24px sans-serif';
+    ctx.fillStyle='#000';
+    ctx.fillText(e.emoji, e.x+3, e.y);
     if (e.hitFlash>0){
       ctx.globalAlpha = e.hitFlash/0.12*0.5;
       ctx.fillStyle='#fff';
-      ctx.beginPath(); ctx.arc(e.x,e.y+bob,vis.hitR,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(e.x,e.y,15,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=1;
     }
     // HP-Leiste
@@ -2214,7 +1657,8 @@ function render(){
 
   // Projektile
   for (const p of state.projectiles){
-    drawProjectile(ctx, p);
+    ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2);
+    ctx.fillStyle = p.color || '#F0B429'; ctx.fill();
   }
 
   // Partikel
@@ -2233,14 +1677,6 @@ function render(){
       ctx.globalAlpha = clamp(p.life/p.maxLife,0,1);
       ctx.strokeStyle='#8E6FCE'; ctx.lineWidth=2;
       ctx.beginPath(); ctx.moveTo(p.x1,p.y1); ctx.lineTo(p.x2,p.y2); ctx.stroke();
-      ctx.globalAlpha=1;
-    } else if (p.type==='blast'){
-      // Bombeneinschlag: Ring waechst auf den vollen Wirkradius und blendet aus.
-      const t = 1 - clamp(p.life/p.maxLife, 0, 1);
-      ctx.globalAlpha = (1-t)*0.9;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.radius*(0.35+0.65*t), 0, Math.PI*2);
-      ctx.fillStyle='rgba(232,116,42,0.28)'; ctx.fill();
-      ctx.strokeStyle='#F0B429'; ctx.lineWidth=4; ctx.stroke();
       ctx.globalAlpha=1;
     }
   }
@@ -2288,11 +1724,7 @@ function updateTopbarUI(){
   dom.livesValue.textContent = livesInt;
   dom.livesValue.classList.toggle('low', livesInt > 0 && livesInt <= 5);
   dom.waveValue.textContent = state.waveNumber + '/' + TOTAL_WAVES;
-  const cap = maxTowers();
-  dom.towerValue.textContent = state.towers.length + '/' + cap;
-  dom.towerValue.classList.toggle('low', state.towers.length >= cap);
   syncBuildMenuUI();
-  syncBombBtnUI();
 }
 
 function updateWaveBarUI(){
@@ -2312,8 +1744,7 @@ function towerStatsHtml(def, lvl){
     '<span>Reichweite: <b>'+lvl.range+'</b></span>' +
     '<span>Rate: <b>'+lvl.rate.toFixed(1)+'/s</b></span>' +
     (lvl.slowPct ? '<span>Verlangsamt: <b>'+Math.round(lvl.slowPct*100)+'%</b></span>' : '') +
-    (lvl.splashRadius ? '<span>Splash-Radius: <b>'+lvl.splashRadius+'</b></span>' : '') +
-    (lvl.chain ? '<span>Ketten-Radius: <b>'+(lvl.chainRadius || 80)+'</b></span>' : '');
+    (lvl.splashRadius ? '<span>Splash-Radius: <b>'+lvl.splashRadius+'</b></span>' : '');
 }
 
 function syncSelectionPanel(){
@@ -2329,22 +1760,17 @@ function syncSelectionPanel(){
   const nextLvl = !isMax ? def.levels[tw.level+1] : null;
   const invested = towerInvestment(tw);
   const refund = sellRefund(invested);
-  const dots = def.levels.map((_,i) => '<span class="lvl-dot'+(i<=tw.level?' filled':'')+'"></span>').join('');
-  /* Stufe-4-Limit blockiert das Upgrade unabhaengig von der Kohle - der Button muss
-     das erklaeren, sonst sieht er nur nach "zu teuer" aus (analog zum disabled-Zustand). */
-  const blockedByLvl4 = !!nextLvl && (tw.level+1 === LEVEL4_INDEX) && level4LimitReached();
+  const dots = [0,1,2].map(i => '<span class="lvl-dot'+(i<=tw.level?' filled':'')+'"></span>').join('');
 
   dom.selectionPanel.innerHTML =
-    '<div class="sel-head"><span class="sel-emoji">'+(tw.level===LEVEL4_INDEX?'👑':'')+def.emoji+'</span>' +
+    '<div class="sel-head"><span class="sel-emoji">'+def.emoji+'</span>' +
     '<span class="sel-name">'+def.name+'</span>' +
     '<span class="sel-level-dots">'+dots+'</span>' +
     '<button class="sel-close" id="selCloseBtn" aria-label="Auswahl schließen">✕</button></div>' +
     '<div class="sel-stats">'+towerStatsHtml(def, lvl)+'</div>' +
     '<div class="sel-actions">' +
       (nextLvl
-        ? (blockedByLvl4
-            ? '<button class="btn btn-primary" id="selUpgradeBtn" disabled>⬆ Stufe-4-Limit erreicht ('+level4Count()+'/'+MAX_LEVEL4_TOWERS+')</button>'
-            : '<button class="btn btn-primary" id="selUpgradeBtn"'+(state.kohle<nextLvl.upgradeCost?' disabled':'')+'>⬆ Upgrade (🪨'+nextLvl.upgradeCost+')</button>')
+        ? '<button class="btn btn-primary" id="selUpgradeBtn"'+(state.kohle<nextLvl.upgradeCost?' disabled':'')+'>⬆ Upgrade (🪨'+nextLvl.upgradeCost+')</button>'
         : '<span class="hint-strip" style="align-self:center;">Maximale Stufe erreicht</span>') +
       '<button class="btn btn-danger" id="selSellBtn">💰 Verkaufen (+🪨'+refund+')</button>' +
     '</div>';
@@ -2360,19 +1786,12 @@ function upgradeTower(id){
   if (!tw) return;
   const def = TOWER_TYPES[tw.type];
   if (tw.level >= def.levels.length-1) return;
-  /* Stufe-4-Limit: gleiches Muster wie das Turmlimit in placeTower() - ablehnen UND
-     sichtbar zurueckmelden, sonst wirkt der Klick verschluckt. */
-  if (tw.level+1 === LEVEL4_INDEX && level4LimitReached()){
-    spawnFloatText(tw.x, tw.y-24, 'Stufe-4-Limit erreicht ('+MAX_LEVEL4_TOWERS+')', '#D9455F');
-    return;
-  }
   const nextLvl = def.levels[tw.level+1];
   if (state.kohle < nextLvl.upgradeCost) return;
   state.kohle -= nextLvl.upgradeCost;
   tw.level++;
   Sound.upgrade();
   syncSelectionPanel();
-  updateTopbarUI();
 }
 
 /* Leichtgewichtiger Refresh: nur den "leistbar"-Status togglen, NIE das DOM neu aufbauen
@@ -2386,9 +1805,7 @@ function refreshSelectionAffordability(){
   if (!tw) return;
   const def = TOWER_TYPES[tw.type];
   const nextLvl = def.levels[tw.level+1];
-  if (!nextLvl) return;
-  const blockedByLvl4 = (tw.level+1 === LEVEL4_INDEX) && level4LimitReached();
-  btn.disabled = blockedByLvl4 || state.kohle < nextLvl.upgradeCost;
+  if (nextLvl) btn.disabled = state.kohle < nextLvl.upgradeCost;
 }
 
 function sellTower(id){
@@ -2401,9 +1818,6 @@ function sellTower(id){
   state.selectedTowerId = null;
   Sound.sell();
   syncSelectionPanel();
-  /* Verkaufen ist auch im pausierten Zustand moeglich - dort laeuft der Loop nicht,
-     der den Turmzaehler sonst nachzieht. */
-  updateTopbarUI();
 }
 
 /* =========================================================
@@ -2412,12 +1826,6 @@ function sellTower(id){
 function placeTower(type, col, row){
   const def = TOWER_TYPES[type];
   if (!isCellFree(col, row)) return false;
-  if (towerLimitReached()){
-    /* Sichtbare Rueckmeldung: sonst wirkt der Klick wie verschluckt. */
-    const c = cellCenter(col, row);
-    spawnFloatText(c.x, c.y, 'Turmlimit erreicht ('+maxTowers()+')', '#D9455F');
-    return false;
-  }
   if (state.kohle < def.cost) return false;
   const c = cellCenter(col, row);
   state.kohle -= def.cost;
@@ -2430,89 +1838,10 @@ function placeTower(type, col, row){
   return true;
 }
 
-/* =========================================================
-   FLAECHENSCHADEN-BOMBE (kaufbarer Einmal-Effekt, Kohle-Senke)
-   ========================================================= */
-function toggleBombArmed(){
-  if (state.screen !== 'game' || state.gameEnded) return;
-  if (state.bombArmed){ state.bombArmed = false; syncBombBtnUI(); return; }
-  /* Waehrend der Pause bewusst gesperrt: das Pause-Overlay liegt ueber der Canvas,
-     der Zielklick waere nicht sauber moeglich (vgl. Playtest-Befund 5.4). */
-  if (state.paused){
-    spawnFloatText(GRID_W/2, 34, 'Bombe geht nicht in der Pause', '#D9455F');
-    return;
-  }
-  if (state.bombsUsed >= BOMB_MAX_PER_GAME){
-    spawnFloatText(GRID_W/2, 34, 'Bomben-Limit erreicht ('+BOMB_MAX_PER_GAME+'/Spiel)', '#D9455F');
-    return;
-  }
-  if (state.playTime < state.bombCooldownUntil){
-    const remaining = Math.ceil(state.bombCooldownUntil - state.playTime);
-    spawnFloatText(GRID_W/2, 34, 'Bombe lädt noch ('+remaining+'s)', '#D9455F');
-    return;
-  }
-  if (state.kohle < BOMB_COST){
-    spawnFloatText(GRID_W/2, 34, 'Zu wenig Kohle für die Bombe (🪨'+BOMB_COST+')', '#D9455F');
-    return;
-  }
-  state.bombArmed = true;
-  state.selectedBuildType = null;
-  dom.canvas.classList.remove('mode-place');
-  syncBuildMenuUI();
-  syncBombBtnUI();
-}
-
-function detonateBomb(x, y){
-  if (state.paused || state.gameEnded) return false;
-  if (state.bombsUsed >= BOMB_MAX_PER_GAME) return false;
-  if (state.playTime < state.bombCooldownUntil) return false;
-  if (state.kohle < BOMB_COST) return false;
-  state.kohle -= BOMB_COST;
-  state.bombsUsed++;
-  state.bombCooldownUntil = state.playTime + BOMB_COOLDOWN;
-  for (const e of state.enemies){
-    if (e.hp <= 0) continue;
-    if (dist({x, y}, e) <= BOMB_RADIUS) applyDamageToEnemy(e, BOMB_DAMAGE, 'bomb');
-  }
-  state.particles.push({ type:'blast', x, y, radius:BOMB_RADIUS, life:0.45, maxLife:0.45 });
-  for (let i=0;i<18;i++){
-    const ang = Math.random()*Math.PI*2, spd = 60+Math.random()*140;
-    state.particles.push({ type:'ember', x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-30, life:0.7, maxLife:0.7 });
-  }
-  spawnFloatText(x, y-30, '💣 '+BOMB_DAMAGE+' Schaden', '#E8742A');
-  Sound.bomb();
-  updateTopbarUI();
-  return true;
-}
-
-function syncBombBtnUI(){
-  if (!dom.bombBtn) return;
-  const limitReached = state.bombsUsed >= BOMB_MAX_PER_GAME;
-  const onCooldown = !limitReached && state.playTime < state.bombCooldownUntil;
-  dom.bombBtn.classList.toggle('armed', !!state.bombArmed);
-  dom.bombBtn.classList.toggle('unaffordable', (state.kohle < BOMB_COST || limitReached || onCooldown) && !state.bombArmed);
-  dom.bombBtn.textContent = state.bombArmed
-    ? '💣 Ziel wählen…'
-    : limitReached
-      ? '💣 Limit erreicht ('+BOMB_MAX_PER_GAME+'/'+BOMB_MAX_PER_GAME+')'
-      : onCooldown
-        ? '💣 Lädt… ('+Math.ceil(state.bombCooldownUntil - state.playTime)+'s)'
-        : '💣 Bombe (🪨'+BOMB_COST+') · '+(BOMB_MAX_PER_GAME-state.bombsUsed)+' übrig';
-}
-
 function handleCanvasPointerDown(evt){
   const { x, y } = clientToLogical(evt.clientX, evt.clientY);
   const { col, row } = cellOf(x, y);
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
-
-  if (state.bombArmed){
-    /* Fehlschlag (Pause/Kohle) entschaerft die Bombe ebenfalls, damit der Modus
-       nicht unsichtbar haengenbleibt. */
-    detonateBomb(x, y);
-    state.bombArmed = false;
-    syncBombBtnUI();
-    return;
-  }
 
   if (state.selectedBuildType){
     const ok = placeTower(state.selectedBuildType, col, row);
@@ -2543,13 +1872,9 @@ function handleKeyDown(evt){
   } else if (evt.key === 'Escape'){
     state.selectedBuildType = null;
     state.selectedTowerId = null;
-    state.bombArmed = false;
     dom.canvas.classList.remove('mode-place');
     syncBuildMenuUI();
     syncSelectionPanel();
-    syncBombBtnUI();
-  } else if (evt.key === 'b' || evt.key === 'B'){
-    toggleBombArmed();
   } else if (evt.key === ' '){
     evt.preventDefault();
     if (!state.waveActive && state.waveNumber < TOTAL_WAVES && !state.gameEnded) beginWave();
@@ -2585,91 +1910,6 @@ function openSettingsModal(){
 function closeSettingsModal(){ dom.settingsModal.classList.remove('show'); }
 
 /* =========================================================
-   FEEDBACK-MODAL
-   ========================================================= */
-/* Merkt sich, ob das Feedback-Modal selbst pausiert hat - beim Schliessen wird die
-   Pause nur zurueckgenommen, wenn sie dadurch ausgeloest wurde, nicht wenn der Spieler
-   vorher schon manuell pausiert hatte. */
-let feedbackAutoPaused = false;
-
-function showFeedbackStatus(text, kind){
-  dom.feedbackStatus.textContent = text;
-  dom.feedbackStatus.className = 'feedback-status' + (kind ? ' ' + kind : '');
-}
-
-function openFeedbackModal(){
-  if (state.screen === 'game' && !state.gameEnded && !state.paused){
-    state.paused = true;
-    dom.pauseOverlay.classList.add('show');
-    dom.pauseBtn.textContent = '▶';
-    feedbackAutoPaused = true;
-  } else {
-    feedbackAutoPaused = false;
-  }
-  dom.feedbackForm.reset();
-  showFeedbackStatus('', '');
-  dom.feedbackSendBtn.disabled = false;
-  dom.feedbackSendBtn.textContent = 'Senden';
-  dom.feedbackModal.classList.add('show');
-  dom.feedbackText.focus();
-}
-
-function closeFeedbackModal(){
-  dom.feedbackModal.classList.remove('show');
-  if (feedbackAutoPaused){
-    state.paused = false;
-    dom.pauseOverlay.classList.remove('show');
-    dom.pauseBtn.textContent = '⏸';
-    feedbackAutoPaused = false;
-  }
-}
-
-async function submitFeedback(evt){
-  evt.preventDefault();
-  const text = dom.feedbackText.value.trim();
-  if (!text){
-    showFeedbackStatus('Bitte eine Nachricht eingeben.', 'error');
-    return;
-  }
-  if (!FEEDBACK_ENDPOINT || FEEDBACK_ENDPOINT.indexOf('PLACEHOLDER') === 0){
-    showFeedbackStatus('Feedback-Versand ist noch nicht eingerichtet.', 'error');
-    return;
-  }
-  dom.feedbackSendBtn.disabled = true;
-  dom.feedbackSendBtn.textContent = 'Sende…';
-  showFeedbackStatus('', '');
-  try {
-    /* JSON statt FormData: kein Seiten-Reload, kein SDK/CDN-Script noetig - Formspree
-       akzeptiert POST mit application/json genauso wie multipart/form-data. _gotcha
-       bleibt als Spam-Honeypot erhalten, nur jetzt im JSON-Body statt im Formdata. */
-    const payload = {
-      message: text,
-      email: dom.feedbackEmail.value.trim(),
-      _subject: 'GLUTFRONT Feedback',
-      _gotcha: dom.feedbackForm.elements['_gotcha'].value
-    };
-    const res = await fetch(FEEDBACK_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok){
-      showFeedbackStatus('Danke! Dein Feedback wurde gesendet.', 'success');
-      dom.feedbackForm.reset();
-      setTimeout(closeFeedbackModal, 1800);
-    } else {
-      showFeedbackStatus('Senden fehlgeschlagen (Server antwortete mit Fehler). Bitte spaeter erneut versuchen.', 'error');
-      dom.feedbackSendBtn.disabled = false;
-      dom.feedbackSendBtn.textContent = 'Senden';
-    }
-  } catch(err){
-    showFeedbackStatus('Senden fehlgeschlagen (keine Verbindung). Bitte spaeter erneut versuchen.', 'error');
-    dom.feedbackSendBtn.disabled = false;
-    dom.feedbackSendBtn.textContent = 'Senden';
-  }
-}
-
-/* =========================================================
    EVENT-VERDRAHTUNG
    ========================================================= */
 const SPEED_STEPS = [1, 1.5, 2];
@@ -2696,11 +1936,6 @@ function wireEvents(){
     r.addEventListener('change', () => { if (r.checked){ Sound.setSoundMode(r.value); updateSoundBtnUI(); } });
   });
   dom.soundBtn.addEventListener('click', cycleAndSyncSoundMode);
-  dom.bombBtn.addEventListener('click', toggleBombArmed);
-
-  dom.feedbackBtn.addEventListener('click', openFeedbackModal);
-  dom.closeFeedbackBtn.addEventListener('click', closeFeedbackModal);
-  dom.feedbackForm.addEventListener('submit', submitFeedback);
 
   dom.pauseBtn.addEventListener('click', () => {
     if (state.gameEnded) return;
