@@ -433,10 +433,11 @@
 
     <div id="howtoBox">
       <b>So funktioniert's:</b> Platziere Einheiten entlang der Wege, um Gegner zu stoppen, bevor sie den Stollen erreichen.
-      Besiegte Gegner lassen <b>Kohle</b> fallen – damit kaufst du neue Einheiten, upgradest bestehende (bis <b>Stufe 4</b>, davon höchstens 3 gleichzeitig)
+      Besiegte Gegner lassen <b>Kohle</b> fallen – damit kaufst du neue Einheiten, upgradest bestehende (bis <b>Stufe 4</b>, davon höchstens 5 gleichzeitig)
       oder zündest eine <b>💣 Bombe</b> (🪨200, max. 15 pro Spiel, danach 6s Abklingzeit) auf
       einen Punkt der Karte – Gegner, die durch die Bombe sterben, lassen dabei nur
-      <b>25 % Kohle</b> fallen.
+      <b>25 % Kohle</b> fallen. Nach Welle 20 kannst du im <b>Endlos-Modus</b> weiterspielen –
+      dort ist das Turmlimit aufgehoben, dafür wird es dauerhaft schwerer.
       Der <b>Ofen</b> 🔥 schießt nicht selbst, sondern spawnt kleine Glutwichte, die in Gegner reinrennen und ihre eigene HP als Schaden austeilen.
       Steuerbar per <b>Maus &amp; Tastatur</b> (Zahlen 1–6 wählen Einheiten, Leertaste startet die nächste Welle) oder <b>Touch</b> – einstellbar unter ⚙️.
     </div>
@@ -546,8 +547,25 @@
       <ol class="hs-list" id="hsList"></ol>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-primary" id="continueEndlessBtn" style="display:none;">▶ Weiterspielen</button>
       <button class="btn btn-primary" id="retryBtn">↺ Nochmal versuchen</button>
       <button class="btn" id="backToMapsBtn">Kartenauswahl</button>
+    </div>
+  </div>
+</div>
+
+<!-- Endlos-Erklaerung Modal -->
+<div class="modal-overlay" id="endlessInfoModal">
+  <div class="modal-card">
+    <h2 class="modal-title">🔥 Endlos-Modus</h2>
+    <p class="modal-sub">Ab hier geht's ohne festes Ende weiter.</p>
+    <p style="color:var(--parchment-dim); font-size:14px; line-height:1.5; margin:0 0 16px;">
+      Wellen, Gegnerzahl und Bosse werden ab jetzt dauerhaft stärker – irgendwann wird es zu
+      viel, das ist so gewollt. Dafür ist das Turmlimit ab sofort aufgehoben: du kannst bauen,
+      solange noch freie Felder da sind.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="endlessInfoOkBtn">Los geht's</button>
     </div>
   </div>
 </div>
@@ -677,6 +695,14 @@ function computeBossWaves(bossInterval, totalWaves){
   if (waves[waves.length-1] !== totalWaves) waves[waves.length-1] = totalWaves;
   return waves;
 }
+/* Fuer Wellen jenseits TOTAL_WAVES (Endlos-Modus, seit 073026): computeBossWaves() allein
+   wuerde hier nie wieder true liefern, weil sein Array bei totalWaves endet - ohne diese
+   Fortsetzung gaebe es im Endlos-Modus nie wieder eine Bosswelle. Der Rhythmus setzt sich
+   ab Welle TOTAL_WAVES im gleichen bossInterval fort (20, 20+bossInterval, ...). */
+function isBossWave(n, bossInterval, totalWaves){
+  if (n <= totalWaves) return computeBossWaves(bossInterval, totalWaves).includes(n);
+  return (n - totalWaves) % bossInterval === 0;
+}
 
 /* Boss-Zusatzskalierung ab Welle 10 (Umbau 072826). Playtest-Befund 11.5: Bosswelle 5
    ist der einzige echte Haertepunkt des Spiels, ab Welle 10 sterben selbst Doppel-Bosse
@@ -686,20 +712,26 @@ function computeBossWaves(bossInterval, totalWaves){
 const bossLateBonusPerWave = 0.10; // +10% zusaetzlich pro Welle ab Welle 10, NUR Bosse
 
 function generateWave(n, tierCfg){
-  const isBoss = computeBossWaves(tierCfg.bossInterval, TOTAL_WAVES).includes(n);
+  const isBoss = isBossWave(n, tierCfg.bossInterval, TOTAL_WAVES);
   const hpScale = 1 + (n-1)*tierCfg.hpScalePerWave;
   const bossHpExtra = (isBoss && n >= 10) ? 1 + (n - 9) * bossLateBonusPerWave : 1;
   const rewardScale = 1 + (n-1)*tierCfg.rewardScalePerWave;
+  /* Wellen seit Welle 20 (0 vor/an Welle 20) - laesst die Gegneranzahl im Endlos-Modus
+     langsam weiterwachsen, statt fuer immer auf dem Welle-20-Plateau stehenzubleiben
+     (die Math.min(...)-Deckel unten waren schon ab Welle 8-16 gesaettigt, siehe
+     Endlos-Modus-Plan.md Abschnitt 1.1). Fuer n<=TOTAL_WAVES ist w=0, also unveraendertes
+     Verhalten wie bisher. */
+  const w = Math.max(0, n - TOTAL_WAVES);
   const list = [];
   const add = (type,count,stagger) => { for(let i=0;i<count;i++) list.push({type, delay:i*stagger}); };
   if (isBoss){
     add('boss', 1 + Math.floor(n/10), 3000);
     add('goblin', 3 + Math.floor(n/5), 700);
   } else {
-    add('slime', 3 + Math.min(n,8), 550);
-    if (n>=3) add('goblin', Math.min(Math.max(0,n-2),8), 750);
-    if (n>=6) add('bat', Math.min(Math.max(0,n-5),6), 450);
-    if (n>=8) add('ogre', Math.min(Math.max(0,Math.floor((n-6)/2)),5), 1300);
+    add('slime', 3 + Math.min(n,8) + Math.floor(w/6), 550);
+    if (n>=3) add('goblin', Math.min(Math.max(0,n-2),8) + Math.floor(w/5), 750);
+    if (n>=6) add('bat', Math.min(Math.max(0,n-5),6) + Math.floor(w/8), 450);
+    if (n>=8) add('ogre', Math.min(Math.max(0,Math.floor((n-6)/2)),5) + Math.floor(w/10), 1300);
   }
   return { wave:n, isBoss, hpScale, bossHpExtra, rewardScale, enemies:list };
 }
@@ -729,7 +761,7 @@ const TOWER_TYPES = {
    unabhaengig von Karte, Schwierigkeitsgrad und maxTowers. Bewusst eine einzige
    Zahl statt einer Formel: leicht zu kommunizieren ("nie mehr als 3 Elite-Tuerme")
    und leicht zu balancieren. */
-const MAX_LEVEL4_TOWERS = 3;
+const MAX_LEVEL4_TOWERS = 5; // war 3, auf Darius-Wunsch angehoben (Endlos-Modus-Planung 073026)
 const LEVEL4_INDEX = 3; // levels[3] == Stufe 4
 function level4Count(){
   return state.towers.filter(t => t.level === LEVEL4_INDEX).length;
@@ -955,6 +987,7 @@ const state = {
   totalKohleEarned: 0,
   playTime: 0,
   gameEnded: false,
+  endlessMode: false,        // ab Welle 20 per "Weiterspielen"-Button aktivierbar
 
   towers: [],
   enemies: [],
@@ -992,6 +1025,7 @@ function resetRunState(){
   state.totalKohleEarned = 0;
   state.playTime = 0;
   state.gameEnded = false;
+  state.endlessMode = false;
   state.towers = [];
   state.enemies = [];
   state.projectiles = [];
@@ -1077,7 +1111,10 @@ const dom = {
   hsSaveBtn: $('hsSaveBtn'),
   hsList: $('hsList'),
   retryBtn: $('retryBtn'),
-  backToMapsBtn: $('backToMapsBtn')
+  backToMapsBtn: $('backToMapsBtn'),
+  continueEndlessBtn: $('continueEndlessBtn'),
+  endlessInfoModal: $('endlessInfoModal'),
+  endlessInfoOkBtn: $('endlessInfoOkBtn')
 };
 const ctx = dom.canvas.getContext('2d');
 
@@ -1316,6 +1353,11 @@ function isCellFree(col, row){
 }
 
 function maxTowers(){
+  /* Im Endlos-Modus bewusst kein Limit (Darius-Wunsch, Endlos-Planung 073026): das
+     Baufeld ist ohnehin durch die freien Zellen physisch begrenzt, ein zusaetzliches
+     Zahlen-Limit wuerde nur einschraenken, ohne die Kohle-Oekonomie zu schuetzen -
+     im Gegenteil, mehr kaufbare Tuerme sind im Endlos-Modus ein zusaetzlicher Kohle-Sink. */
+  if (state.endlessMode) return Infinity;
   /* Vor dem ersten Kartenstart ist mapKey null - dann gibt es kein Limit zu pruefen. */
   const def = MAPS[state.mapKey];
   if (!def) return Infinity;
@@ -1390,7 +1432,7 @@ function showWaveBanner(wave){
 
 function updateWaveCountdown(dt){
   if (state.waveActive || state.gameEnded) return;
-  if (state.waveNumber >= TOTAL_WAVES) return;
+  if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode) return;
   state.waveCountdown -= dt;
   if (state.waveCountdown <= 0){
     beginWave();
@@ -1434,7 +1476,7 @@ function checkWaveCompletion(){
     state.kohle += bonus;
     state.totalKohleEarned += bonus;
     spawnFloatText(GRID_W/2, 34, 'Welle geschafft! +'+bonus+' 🪨', '#4FB3A9');
-    if (state.waveNumber >= TOTAL_WAVES){
+    if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode){
       triggerVictory();
     } else {
       state.waveCountdown = WAVE_AUTOSTART_SECONDS;
@@ -1567,7 +1609,13 @@ function triggerDefeat(){
   state.gameEnded = true; state.waveActive = false;
   Sound.lose();
   dom.gameOverTitle.textContent = 'Niederlage';
-  dom.gameOverSub.textContent = 'Der Stollen wurde überrannt.';
+  dom.gameOverSub.textContent = state.endlessMode
+    ? 'Welle ' + state.waveNumber + ' im Endlos-Modus – die Front hat gehalten, so lange es ging.'
+    : 'Der Stollen wurde überrannt.';
+  /* Der Weiterspielen-Button gehoert nur zum einmaligen Sieg-bei-Welle-20-Moment (siehe
+     triggerVictory). Eine Niederlage - ob in der normalen Runde oder nach beliebig vielen
+     Endlos-Wellen - ist immer ein echtes Ende, nie eine Zwischenstation. */
+  dom.continueEndlessBtn.style.display = 'none';
   fillGameOverStats();
   dom.gameOverModal.classList.add('show');
 }
@@ -1576,8 +1624,31 @@ function triggerVictory(){
   Sound.win();
   dom.gameOverTitle.textContent = 'Sieg!';
   dom.gameOverSub.textContent = 'Alle '+TOTAL_WAVES+' Wellen überstanden – die Front hält.';
+  /* Sichtbar nur hier: das ist der einzige Moment, an dem "weiterspielen statt aufhoeren"
+     ueberhaupt eine sinnvolle Frage ist (siehe Endlos-Modus-Plan.md). */
+  dom.continueEndlessBtn.style.display = '';
   fillGameOverStats();
   dom.gameOverModal.classList.add('show');
+}
+
+/* =========================================================
+   ENDLOS-MODUS (ab Welle 20 per Button, Umsetzung 073026)
+   ========================================================= */
+function startEndlessMode(){
+  dom.gameOverModal.classList.remove('show');
+  dom.endlessInfoModal.classList.add('show');
+}
+function confirmEndlessInfo(){
+  dom.endlessInfoModal.classList.remove('show');
+  state.endlessMode = true;
+  state.gameEnded = false;
+  /* Gleiche Fortsetzungslogik wie bei jeder anderen ueberstandenen Welle in
+     checkWaveCompletion() - Welle 20 war nur deshalb anders, weil triggerVictory()
+     statt dieses Zweigs lief. */
+  state.waveCountdown = WAVE_AUTOSTART_SECONDS;
+  dom.waveBar.classList.remove('hidden');
+  updateWaveBarUI();
+  updateTopbarUI();
 }
 
 /* =========================================================
@@ -2296,16 +2367,16 @@ function updateTopbarUI(){
   const livesInt = Math.max(0, Math.floor(state.lives));
   dom.livesValue.textContent = livesInt;
   dom.livesValue.classList.toggle('low', livesInt > 0 && livesInt <= 5);
-  dom.waveValue.textContent = state.waveNumber + '/' + TOTAL_WAVES;
+  dom.waveValue.textContent = state.endlessMode ? (state.waveNumber + ' ∞') : (state.waveNumber + '/' + TOTAL_WAVES);
   const cap = maxTowers();
-  dom.towerValue.textContent = state.towers.length + '/' + cap;
-  dom.towerValue.classList.toggle('low', state.towers.length >= cap);
+  dom.towerValue.textContent = state.towers.length + '/' + (cap === Infinity ? '∞' : cap);
+  dom.towerValue.classList.toggle('low', cap !== Infinity && state.towers.length >= cap);
   syncBuildMenuUI();
   syncBombBtnUI();
 }
 
 function updateWaveBarUI(){
-  if (state.waveNumber >= TOTAL_WAVES) { dom.waveBar.classList.add('hidden'); return; }
+  if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode) { dom.waveBar.classList.add('hidden'); return; }
   if (state.waveActive) return;
   dom.nextWaveNum.textContent = state.waveNumber + 1;
   dom.waveCountdown.textContent = Math.max(0, Math.ceil(state.waveCountdown));
@@ -2561,7 +2632,7 @@ function handleKeyDown(evt){
     toggleBombArmed();
   } else if (evt.key === ' '){
     evt.preventDefault();
-    if (!state.waveActive && state.waveNumber < TOTAL_WAVES && !state.gameEnded) beginWave();
+    if (!state.waveActive && (state.waveNumber < TOTAL_WAVES || state.endlessMode) && !state.gameEnded) beginWave();
   } else if (evt.key === 'm' || evt.key === 'M'){
     cycleAndSyncSoundMode();
   }
@@ -2723,11 +2794,13 @@ function wireEvents(){
     dom.speedBtn.textContent = state.speedMultiplier + '×';
   });
   dom.startWaveBtn.addEventListener('click', () => {
-    if (!state.waveActive && state.waveNumber < TOTAL_WAVES && !state.gameEnded) beginWave();
+    if (!state.waveActive && (state.waveNumber < TOTAL_WAVES || state.endlessMode) && !state.gameEnded) beginWave();
   });
 
   dom.retryBtn.addEventListener('click', () => { dom.gameOverModal.classList.remove('show'); startGame(state.mapKey); });
   dom.backToMapsBtn.addEventListener('click', () => { dom.gameOverModal.classList.remove('show'); Sound.stopMusic(); showScreen('start'); });
+  dom.continueEndlessBtn.addEventListener('click', startEndlessMode);
+  dom.endlessInfoOkBtn.addEventListener('click', confirmEndlessInfo);
 
   dom.hsSaveBtn.addEventListener('click', () => {
     const name = dom.hsNameInput.value.trim().slice(0,16) || 'Anonym';
