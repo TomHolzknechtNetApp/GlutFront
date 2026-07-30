@@ -437,7 +437,11 @@
       oder zündest eine <b>💣 Bombe</b> (🪨200, max. 15 pro Spiel, danach 6s Abklingzeit) auf
       einen Punkt der Karte – Gegner, die durch die Bombe sterben, lassen dabei nur
       <b>25 % Kohle</b> fallen. Nach Welle 20 kannst du im <b>Endlos-Modus</b> weiterspielen –
-      dort ist das Turmlimit aufgehoben, dafür wird es dauerhaft schwerer.
+      dort ist das Turmlimit aufgehoben, dafür wird es dauerhaft schwerer und neue Gegner
+      tauchen auf: <b>Salamander</b> 🦎 ignorieren Feuerschaden (Ofen) komplett, <b>Gepanzerte</b> 🛡️
+      mindern jeden Schaden außer vom Magier – Mischbestand lohnt sich. Drei gleichtypige
+      Stufe-4-Türme lassen sich außerdem zu einem <b>💎 Paragon</b> verschmelzen (höchstens
+      1 pro Turmtyp) – deutlich stärker, macht aber zwei Bauplätze wieder frei.
       Der <b>Ofen</b> 🔥 schießt nicht selbst, sondern spawnt kleine Glutwichte, die in Gegner reinrennen und ihre eigene HP als Schaden austeilen.
       Steuerbar per <b>Maus &amp; Tastatur</b> (Zahlen 1–6 wählen Einheiten, Leertaste startet die nächste Welle) oder <b>Touch</b> – einstellbar unter ⚙️.
     </div>
@@ -675,12 +679,20 @@ function rasterizePath(points){
 }
 function pathToPixels(points){ return points.map(([c,r])=>({x:c*CELL+CELL/2, y:r*CELL+CELL/2})); }
 
+/* Salamander/Gepanzerter (Umbau 073026): erzwingen Mischbestand im Endlos-Modus statt
+   einer Ein-Turmtyp-Monokultur (Darius-Fund: Welle 68, komplette Karte mit Lv.3-Oefen
+   zugepflastert, siehe Feedback 21). immuneTo/weakTo/resistTo werden in
+   applyDamageToEnemy() gegen den dmgType des zufuegenden Turms geprueft. */
 const ENEMY_TYPES = {
   slime:  { name:'Schleimling', hp:30,  speed:50,  reward:8,   livesCost:1, emoji:'🟢' },
   goblin: { name:'Goblin',      hp:55,  speed:65,  reward:14,  livesCost:1, emoji:'👺' },
   bat:    { name:'Fledermaus',  hp:22,  speed:100, reward:10,  livesCost:1, emoji:'🦇' },
   ogre:   { name:'Oger',        hp:160, speed:35,  reward:30,  livesCost:2, emoji:'👹' },
-  boss:   { name:'Drache',      hp:500, speed:40,  reward:150, livesCost:5, emoji:'🐉' }
+  boss:   { name:'Drache',      hp:500, speed:40,  reward:150, livesCost:5, emoji:'🐉' },
+  salamander: { name:'Salamander', hp:140, speed:42, reward:26, livesCost:2, emoji:'🦎',
+    immuneTo:'feuer', weakTo:'frost', weakMult:1.5 },
+  gepanzert:  { name:'Gepanzerter', hp:120, speed:32, reward:24, livesCost:2, emoji:'🛡️',
+    resistTo:'physisch', resistPct:0.45 }
 };
 
 /* Bosswellen = alle Vielfachen von bossInterval bis TOTAL_WAVES, aber die LETZTE
@@ -732,6 +744,12 @@ function generateWave(n, tierCfg){
     if (n>=3) add('goblin', Math.min(Math.max(0,n-2),8) + Math.floor(w/5), 750);
     if (n>=6) add('bat', Math.min(Math.max(0,n-5),6) + Math.floor(w/8), 450);
     if (n>=8) add('ogre', Math.min(Math.max(0,Math.floor((n-6)/2)),5) + Math.floor(w/10), 1300);
+    /* Nur im Endlos-Bereich (n>TOTAL_WAVES), gestaffelt eingefuehrt statt beide auf
+       einmal - siehe Endlos-Modus-Plan.md Abschnitt 1.4 ("Aeren"). Beide erzwingen
+       Mischbestand: Salamander macht reinen Ofen-Spam wirkungslos, Gepanzerter macht
+       "irgendeine Sorte spammen, Hauptsache nicht Ofen" ebenfalls unattraktiv. */
+    if (n>=TOTAL_WAVES+5) add('salamander', 2 + Math.floor((n-(TOTAL_WAVES+5))/8), 900);
+    if (n>=TOTAL_WAVES+15) add('gepanzert', 2 + Math.floor((n-(TOTAL_WAVES+15))/10), 1000);
   }
   return { wave:n, isBoss, hpScale, bossHpExtra, rewardScale, enemies:list };
 }
@@ -743,18 +761,23 @@ function generateWave(n, tierCfg){
    damit er sich wie eine Belohnung anfuehlt und nicht wie eine Zahlenkorrektur.
    Begrenzt durch MAX_LEVEL4_TOWERS, sonst waere das Brett am Ende komplett Stufe 4. */
 const TOWER_ORDER = ['schleuderer','frostturm','ofen','kanone','magier','scharfschuetze'];
+/* dmgType (Umbau 073026, gegen Ein-Turmtyp-Monokulturen im Endlos-Modus - Darius' Fund:
+   Welle 68, komplette Karte mit Lv.3-Oefen zugepflastert, 155.773 ungenutzte Kohle, siehe
+   Feedback 21). Nur Turm-/Glutwicht-Schaden traegt einen Typ, applyDamageToEnemy() prueft
+   ihn gegen etwaige Resistenzen/Schwaechen auf ENEMY_TYPES. Die Bombe bleibt bewusst aussen
+   vor - sie ist schon durch Kosten/Cooldown/Limit gedeckelt, kein Monokultur-Problem. */
 const TOWER_TYPES = {
-  schleuderer: { name:'Schleuderer', emoji:'🏹', cost:50, kind:'shooter', color:'#C9A24B',
+  schleuderer: { name:'Schleuderer', emoji:'🏹', cost:50, kind:'shooter', color:'#C9A24B', dmgType:'physisch',
     levels:[ {dmg:8,range:120,rate:1.4}, {dmg:14,range:120,rate:1.7,upgradeCost:40}, {dmg:22,range:140,rate:2.0,upgradeCost:70}, {dmg:38,range:150,rate:2.3,upgradeCost:260} ] },
-  frostturm: { name:'Frostturm', emoji:'❄️', cost:90, kind:'shooter', slow:true, color:'#4FB3A9',
+  frostturm: { name:'Frostturm', emoji:'❄️', cost:90, kind:'shooter', slow:true, color:'#4FB3A9', dmgType:'frost',
     levels:[ {dmg:4,range:110,rate:1.0,slowPct:0.40,slowDur:1.5}, {dmg:6,range:110,rate:1.0,slowPct:0.50,slowDur:1.5,upgradeCost:60}, {dmg:9,range:130,rate:1.0,slowPct:0.60,slowDur:2.0,upgradeCost:100}, {dmg:16,range:140,rate:1.0,slowPct:0.72,slowDur:2.5,upgradeCost:240} ] },
-  ofen: { name:'Ofen', emoji:'🔥', cost:140, kind:'spawner', color:'#E8742A',
+  ofen: { name:'Ofen', emoji:'🔥', cost:140, kind:'spawner', color:'#E8742A', dmgType:'feuer',
     levels:[ {childHp:20,interval:3.5,maxActive:2}, {childHp:32,interval:3.0,maxActive:3,upgradeCost:90}, {childHp:48,interval:2.5,maxActive:4,upgradeCost:150}, {childHp:85,interval:2.0,maxActive:6,upgradeCost:320} ] },
-  kanone: { name:'Kanone', emoji:'💣', cost:150, kind:'shooter', splash:true, color:'#8A8F99',
+  kanone: { name:'Kanone', emoji:'💣', cost:150, kind:'shooter', splash:true, color:'#8A8F99', dmgType:'physisch',
     levels:[ {dmg:25,range:130,rate:0.6,splashRadius:50}, {dmg:38,range:130,rate:0.6,splashRadius:60,upgradeCost:100}, {dmg:55,range:130,rate:0.8,splashRadius:75,upgradeCost:160}, {dmg:95,range:130,rate:0.95,splashRadius:95,upgradeCost:340} ] },
-  magier: { name:'Magier', emoji:'🧙', cost:170, kind:'shooter', slow:true, color:'#8E6FCE',
+  magier: { name:'Magier', emoji:'🧙', cost:170, kind:'shooter', slow:true, color:'#8E6FCE', dmgType:'arkan',
     levels:[ {dmg:14,range:140,rate:1.2,slowPct:0.25,slowDur:1.0}, {dmg:20,range:140,rate:1.2,slowPct:0.35,slowDur:1.0,upgradeCost:110}, {dmg:28,range:160,rate:1.2,slowPct:0.45,slowDur:1.0,chain:true,upgradeCost:180}, {dmg:50,range:160,rate:1.2,slowPct:0.55,slowDur:1.0,chain:true,chainRadius:130,upgradeCost:360} ] },
-  scharfschuetze: { name:'Scharfschütze', emoji:'🎯', cost:220, kind:'shooter', targeting:'strongest', color:'#D9455F',
+  scharfschuetze: { name:'Scharfschütze', emoji:'🎯', cost:220, kind:'shooter', targeting:'strongest', color:'#D9455F', dmgType:'physisch',
     levels:[ {dmg:70,range:220,rate:0.5}, {dmg:100,range:220,rate:0.5,upgradeCost:140}, {dmg:145,range:250,rate:0.65,upgradeCost:220}, {dmg:260,range:280,rate:0.75,upgradeCost:420} ] }
 };
 /* Hoechstens so viele Tuerme duerfen gleichzeitig auf Stufe 4 stehen - global,
@@ -768,6 +791,72 @@ function level4Count(){
 }
 function level4LimitReached(){
   return level4Count() >= MAX_LEVEL4_TOWERS;
+}
+
+/* =========================================================
+   PARAGON (Umbau 073026) - loest das "ganze Karte mit einem Turmtyp zugepflastert"-
+   Problem raeumlich statt nur ueber die Kohle: mehrere Stufe-4-Tuerme desselben Typs
+   verschmelzen zu einem einzigen, viel staerkeren Turm. Nach BTD6-Vorbild (Darius-Wunsch):
+   knapp gedeckelt (1 pro Typ), Fusionskosten steigen mit jeder weiteren Fusion. */
+const PARAGON_LEVEL_INDEX = 4; // ausserhalb von def.levels (Index 0-3) - nur per Fusion erreichbar, nie per Upgrade-Button
+const PARAGON_FUSION_COUNT = 3; // so viele gleichtypige Stufe-4-Tuerme insgesamt noetig (der ausgewaehlte zaehlt mit)
+const MAX_PARAGONS_PER_TYPE = 1;
+/* Werte, die beim Verschmelzen mit der Stufe-4-Basis multipliziert werden - alles, was
+   hier fehlt (z.B. slowPct, chain), wird unveraendert von Stufe 4 uebernommen: der
+   Paragon soll dramatisch mehr Feuerkraft/Reichweite haben, aber keine albernen
+   Prozentwerte (>100% Verlangsamung waeren unsinnig). */
+const PARAGON_STAT_MULT = { dmg:5, rate:1.3, range:1.3, childHp:5, maxActive:2, splashRadius:1.6, chainRadius:1.4 };
+
+function towerLevelStats(tw, def){
+  return tw.level === PARAGON_LEVEL_INDEX ? tw.paragonStats : def.levels[tw.level];
+}
+function paragonCountForType(type){
+  return state.towers.filter(t => t.type === type && t.level === PARAGON_LEVEL_INDEX).length;
+}
+function sameTypeLevel4Others(tw){
+  return state.towers.filter(t => t.id !== tw.id && t.type === tw.type && t.level === LEVEL4_INDEX);
+}
+function canFuseParagon(tw){
+  if (tw.level !== LEVEL4_INDEX) return false;
+  if (paragonCountForType(tw.type) >= MAX_PARAGONS_PER_TYPE) return false;
+  return sameTypeLevel4Others(tw).length >= PARAGON_FUSION_COUNT - 1;
+}
+/* Steigt mit der Investition der verschmolzenen Tuerme (spaeter im Spiel teurer, weil
+   dann auch mehr in sie gesteckt wurde) UND zusaetzlich mit jedem bereits gebauten
+   Paragon (1. Fusion 3x, 2. Fusion 5x, ... - "ueberproportional", wie von Darius
+   gewuenscht, statt linear). */
+function paragonFusionCost(tw, others){
+  const totalInvested = [tw, ...others].reduce((sum,t) => sum + towerInvestment(t), 0);
+  const paragonsSoFar = state.towers.filter(t => t.level === PARAGON_LEVEL_INDEX).length;
+  return Math.round(totalInvested * (3 + paragonsSoFar*2));
+}
+function fuseParagon(id){
+  const tw = state.towers.find(t => t.id === id);
+  if (!tw || !canFuseParagon(tw)) return;
+  const def = TOWER_TYPES[tw.type];
+  const others = sameTypeLevel4Others(tw).slice(0, PARAGON_FUSION_COUNT-1);
+  const cost = paragonFusionCost(tw, others);
+  if (state.kohle < cost){
+    spawnFloatText(tw.x, tw.y-24, 'Zu wenig Kohle für Fusion (🪨'+cost+')', '#D9455F');
+    return;
+  }
+  state.kohle -= cost;
+  const otherIds = new Set(others.map(o => o.id));
+  state.towers = state.towers.filter(t => !otherIds.has(t.id)); // Zellen werden dadurch wieder frei
+  const base = def.levels[LEVEL4_INDEX];
+  const stats = {};
+  for (const key of Object.keys(base)){
+    if (key === 'upgradeCost') continue;
+    const mult = PARAGON_STAT_MULT[key];
+    stats[key] = mult ? Math.round(base[key]*mult*10)/10 : base[key];
+  }
+  tw.level = PARAGON_LEVEL_INDEX;
+  tw.paragonStats = stats;
+  tw.paragonFusionCost = cost;
+  Sound.upgrade();
+  spawnFloatText(tw.x, tw.y-24, '💎 PARAGON!', '#F0B429');
+  syncSelectionPanel();
+  updateTopbarUI();
 }
 /* Kaufbarer Einmal-Effekt (Umbau 072826): reine Kohle-Senke ohne Cooldown und ohne
    Kaufbegrenzung. Sie soll die Spitzen abfangen (Bosswelle, durchgerutschte Gruppe)
@@ -1132,7 +1221,11 @@ function fmtTime(sec){
 function towerInvestment(tw){
   const def = TOWER_TYPES[tw.type];
   let total = def.cost;
-  for (let i=1;i<=tw.level;i++){ total += def.levels[i].upgradeCost; }
+  /* Paragon (level 4) liegt ausserhalb von def.levels (Index 0-3) - die normalen
+     Upgrade-Stufen zaehlen trotzdem mit, die Fusionskosten kommen separat oben drauf. */
+  const upgradeLevels = Math.min(tw.level, LEVEL4_INDEX);
+  for (let i=1;i<=upgradeLevels;i++){ total += def.levels[i].upgradeCost; }
+  if (tw.level === PARAGON_LEVEL_INDEX && tw.paragonFusionCost) total += tw.paragonFusionCost;
   return total;
 }
 
@@ -1654,10 +1747,20 @@ function confirmEndlessInfo(){
 /* =========================================================
    SCHADEN, TÜRME, PROJEKTILE, GLUTWICHTE
    ========================================================= */
-function applyDamageToEnemy(e, amount, source){
+function applyDamageToEnemy(e, amount, source, dmgType){
   if (e.hp <= 0) return;
-  e.hp -= amount;
-  e.hitFlash = 0.12;
+  /* Schadenstyp-Resistenzen (Umbau 073026, siehe TOWER_TYPES-Kommentar): nur wenn der
+     Aufrufer einen dmgType mitgibt (Turm-/Glutwicht-Schaden), sonst unveraendert - die
+     Bombe (kein dmgType) trifft also immer voll, unabhaengig von Resistenzen. */
+  let dealt = amount;
+  if (dmgType){
+    const res = ENEMY_TYPES[e.type];
+    if (res.immuneTo === dmgType) dealt = 0;
+    else if (res.weakTo === dmgType) dealt = amount * (res.weakMult || 1.5);
+    else if (res.resistTo === dmgType) dealt = amount * (1 - (res.resistPct || 0));
+  }
+  e.hp -= dealt;
+  if (dealt > 0) e.hitFlash = 0.12;
   if (e.hp <= 0){
     e.hp = 0;
     /* Gegner, die durch die Bombe sterben, zahlen nur BOMB_REWARD_PCT ihres Lohns (siehe
@@ -1726,7 +1829,7 @@ function updateEnemies(dt){
 function updateTowers(dt){
   for (const tw of state.towers){
     const def = TOWER_TYPES[tw.type];
-    const lvl = def.levels[tw.level];
+    const lvl = towerLevelStats(tw, def);
     if (def.kind === 'spawner'){
       tw.spawnTimer -= dt;
       const activeCount = state.imps.filter(i => i.ownerId === tw.id).length;
@@ -1754,7 +1857,7 @@ function updateTowers(dt){
          (Playtest-Befund 2.4 "Magier-Kette zu klein"). Jetzt pro Stufe konfigurierbar;
          Stufe 1-3 haben kein chainRadius und behalten damit die alten 80. */
       chainRadius: lvl.chainRadius || 80,
-      color: def.color, kind: tw.type, angle: 0, trail: []
+      color: def.color, kind: tw.type, dmgType: def.dmgType, angle: 0, trail: []
     });
     tw.cooldown = 1 / lvl.rate;
     Sound.shoot();
@@ -1769,20 +1872,20 @@ function updateProjectiles(dt){
     const d = dist(p, target);
     const step = p.speed*dt;
     if (d <= step){
-      applyDamageToEnemy(target, p.dmg);
+      applyDamageToEnemy(target, p.dmg, undefined, p.dmgType);
       spawnHitSpark(target.x, target.y, p.color);
       if (p.slowPct){ target.slowUntil = state.playTime + p.slowDur; target.slowPct = p.slowPct; }
       if (p.splashRadius){
         for (const other of state.enemies){
           if (other.id === target.id || other.hp <= 0) continue;
-          if (dist(target, other) <= p.splashRadius) applyDamageToEnemy(other, p.dmg);
+          if (dist(target, other) <= p.splashRadius) applyDamageToEnemy(other, p.dmg, undefined, p.dmgType);
         }
       }
       if (p.chain){
         const chainR = p.chainRadius || 80;
         const other = state.enemies.find(e => e.id !== target.id && e.hp > 0 && dist(target, e) <= chainR);
         if (other){
-          applyDamageToEnemy(other, Math.round(p.dmg*0.5));
+          applyDamageToEnemy(other, Math.round(p.dmg*0.5), undefined, p.dmgType);
           other.slowUntil = state.playTime + 1.0;
           other.slowPct = Math.max(other.slowPct || 0, 0.3);
           state.particles.push({ type:'chain', x1:target.x, y1:target.y, x2:other.x, y2:other.y, life:0.15, maxLife:0.15 });
@@ -1813,7 +1916,7 @@ function updateImps(dt){
     const d = dist(imp, target);
     const step = 70*dt;
     if (d <= 14){
-      applyDamageToEnemy(target, imp.hp);
+      applyDamageToEnemy(target, imp.hp, undefined, 'feuer'); // Glutwichte sind immer Ofen/Feuer, einziger Spawner-Turmtyp
       spawnHitSpark(target.x, target.y, '#E8742A');
     } else {
       imp.x += (target.x - imp.x)/d*step;
@@ -1867,7 +1970,9 @@ const ENEMY_VISUAL = {
   goblin: { hitR:14 },
   bat:    { hitR:12 },
   ogre:   { hitR:18 },
-  boss:   { hitR:24 }
+  boss:   { hitR:24 },
+  salamander: { hitR:15 },
+  gepanzert:  { hitR:16 }
 };
 
 function drawSlime(c, e){
@@ -1989,7 +2094,42 @@ function drawDragon(c, e){
   c.beginPath(); c.arc(17,-4,1.6,0,Math.PI*2); c.fill();
 }
 
-const ENEMY_DRAW = { slime:drawSlime, goblin:drawGoblin, bat:drawBat, ogre:drawOgre, boss:drawDragon };
+/* Laenglicher Echsenkoerper mit Schwanz, orange/dunkel gefleckt (feuerresistent -
+   mythologisch mit Feuer assoziiert, daher die Farbe statt eines kuehlen Tons). */
+function drawSalamander(c, e){
+  c.fillStyle='#B8460E';
+  c.beginPath(); c.moveTo(-12,3); c.quadraticCurveTo(-22,7,-27,1); c.quadraticCurveTo(-20,5,-12,7); c.closePath(); c.fill();
+  c.fillStyle='#D9601A';
+  c.beginPath(); c.ellipse(0,2,14,8,0,0,Math.PI*2); c.fill();
+  c.fillStyle='#3A2418';
+  for (const [dx,dy] of [[-6,-2],[0,4],[6,-1]]){ c.beginPath(); c.arc(dx,dy,2,0,Math.PI*2); c.fill(); }
+  c.fillStyle='#B8460E';
+  c.beginPath(); c.ellipse(12,0,6,5,0,0,Math.PI*2); c.fill();
+  c.fillStyle='#FFD24C';
+  c.beginPath(); c.arc(14,-1,1.4,0,Math.PI*2); c.fill();
+  c.strokeStyle='#7A3A12'; c.lineWidth=2.5; c.lineCap='round';
+  c.beginPath(); c.moveTo(-4,8); c.lineTo(-6,13); c.stroke();
+  c.beginPath(); c.moveTo(5,8); c.lineTo(7,13); c.stroke();
+}
+
+/* Blockiger Koerper mit sichtbaren Platten/Nieten - soll auf einen Blick als
+   "gepanzert" lesen, damit die Physisch-Resistenz nicht rein aus der Statistikanzeige
+   erschlossen werden muss. */
+function drawGepanzert(c, e){
+  c.fillStyle='#5B6270';
+  roundRect(c,-13,-14,26,24,4); c.fill();
+  c.strokeStyle='#2E323B'; c.lineWidth=2; roundRect(c,-13,-14,26,24,4); c.stroke();
+  c.strokeStyle='#2E323B'; c.lineWidth=1.5;
+  c.beginPath(); c.moveTo(-13,-4); c.lineTo(13,-4); c.stroke();
+  c.beginPath(); c.moveTo(-13,6); c.lineTo(13,6); c.stroke();
+  c.fillStyle='#8A93A3';
+  for (const [dx,dy] of [[-9,-9],[9,-9],[-9,1],[9,1],[-9,10],[9,10]]){ c.beginPath(); c.arc(dx,dy,1.6,0,Math.PI*2); c.fill(); }
+  c.fillStyle='#C1440E';
+  c.beginPath(); c.arc(-4,-9,1.8,0,Math.PI*2); c.fill();
+  c.beginPath(); c.arc(4,-9,1.8,0,Math.PI*2); c.fill();
+}
+
+const ENEMY_DRAW = { slime:drawSlime, goblin:drawGoblin, bat:drawBat, ogre:drawOgre, boss:drawDragon, salamander:drawSalamander, gepanzert:drawGepanzert };
 
 function drawEnemyFigure(c, e, bob){
   const facingLeft = Math.cos(e.angle||0) < 0;
@@ -2215,7 +2355,7 @@ function render(){
   // Türme
   for (const tw of state.towers){
     const def = TOWER_TYPES[tw.type];
-    const lvl = def.levels[tw.level];
+    const lvl = towerLevelStats(tw, def);
     const isSelected = state.selectedTowerId === tw.id;
     if (isSelected && lvl.range){
       ctx.beginPath(); ctx.arc(tw.x,tw.y,lvl.range,0,Math.PI*2);
@@ -2224,9 +2364,20 @@ function render(){
     }
     /* Stufe 4 bekommt einen goldenen, pulsierenden Sockel statt des dunklen Kreises,
        damit Elite-Tuerme auf einen Blick vom Rest zu unterscheiden sind (Umbau 072826).
-       Der Turm-Emoji bleibt, damit der Typ weiter erkennbar ist. */
+       Paragon (Umbau 073026, per Fusion) bekommt einen noch helleren, cyanfarbenen
+       Sockel - klar ueber Stufe 4 hinausgehend, statt nur eine weitere Farbvariante.
+       Der Turm-Emoji bleibt in beiden Faellen, damit der Typ weiter erkennbar ist. */
     const isElite = tw.level === LEVEL4_INDEX;
-    if (isElite){
+    const isParagon = tw.level === PARAGON_LEVEL_INDEX;
+    if (isParagon){
+      const pulse = 0.5 + 0.5*Math.sin(state.playTime*4 + tw.id);
+      ctx.beginPath(); ctx.arc(tw.x,tw.y,26+pulse*3,0,Math.PI*2);
+      ctx.fillStyle='rgba(79,179,169,'+(0.15+pulse*0.15).toFixed(3)+')'; ctx.fill();
+      ctx.beginPath(); ctx.arc(tw.x,tw.y,20,0,Math.PI*2);
+      ctx.fillStyle='#154A46'; ctx.fill();
+      ctx.strokeStyle = isSelected ? '#CFFFFA' : '#4FB3A9';
+      ctx.lineWidth=3.5; ctx.stroke();
+    } else if (isElite){
       const pulse = 0.5 + 0.5*Math.sin(state.playTime*3 + tw.id);
       ctx.beginPath(); ctx.arc(tw.x,tw.y,24+pulse*2,0,Math.PI*2);
       ctx.fillStyle='rgba(240,180,41,'+(0.10+pulse*0.10).toFixed(3)+')'; ctx.fill();
@@ -2243,7 +2394,14 @@ function render(){
     ctx.font='22px sans-serif';
     ctx.fillStyle='#000';
     ctx.fillText(def.emoji, tw.x, tw.y);
-    if (isElite){
+    if (isParagon){
+      // Diamant-Abzeichen statt Krone - unterscheidbar von Stufe 4 auf einen Blick.
+      ctx.beginPath(); ctx.arc(tw.x+15, tw.y-15, 11, 0, Math.PI*2);
+      ctx.fillStyle='#4FB3A9'; ctx.fill();
+      ctx.strokeStyle='#14110F'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.font='13px sans-serif';
+      ctx.fillText('💎', tw.x+15, tw.y-14);
+    } else if (isElite){
       // Kronen-Abzeichen statt Stufenziffer - groesser, damit es aus der Distanz liest.
       ctx.beginPath(); ctx.arc(tw.x+15, tw.y-15, 11, 0, Math.PI*2);
       ctx.fillStyle='#F0B429'; ctx.fill();
@@ -2404,8 +2562,9 @@ function syncSelectionPanel(){
     return;
   }
   const def = TOWER_TYPES[tw.type];
-  const lvl = def.levels[tw.level];
-  const isMax = tw.level >= def.levels.length - 1;
+  const isParagon = tw.level === PARAGON_LEVEL_INDEX;
+  const lvl = towerLevelStats(tw, def);
+  const isMax = tw.level >= def.levels.length - 1; // true ab Stufe 4 UND bei Paragon (4 >= 3)
   const nextLvl = !isMax ? def.levels[tw.level+1] : null;
   const invested = towerInvestment(tw);
   const refund = sellRefund(invested);
@@ -2413,10 +2572,14 @@ function syncSelectionPanel(){
   /* Stufe-4-Limit blockiert das Upgrade unabhaengig von der Kohle - der Button muss
      das erklaeren, sonst sieht er nur nach "zu teuer" aus (analog zum disabled-Zustand). */
   const blockedByLvl4 = !!nextLvl && (tw.level+1 === LEVEL4_INDEX) && level4LimitReached();
+  /* Paragon-Fusion (Umbau 073026): nur an Stufe-4-Tuermen relevant, komplett unabhaengig
+     vom normalen Upgrade-Pfad (der ist bei Stufe 4 schon "isMax"). */
+  const fuseEligible = !isParagon && tw.level === LEVEL4_INDEX && canFuseParagon(tw);
+  const fuseCost = fuseEligible ? paragonFusionCost(tw, sameTypeLevel4Others(tw).slice(0, PARAGON_FUSION_COUNT-1)) : 0;
 
   dom.selectionPanel.innerHTML =
-    '<div class="sel-head"><span class="sel-emoji">'+(tw.level===LEVEL4_INDEX?'👑':'')+def.emoji+'</span>' +
-    '<span class="sel-name">'+def.name+'</span>' +
+    '<div class="sel-head"><span class="sel-emoji">'+(isParagon?'💎':(tw.level===LEVEL4_INDEX?'👑':''))+def.emoji+'</span>' +
+    '<span class="sel-name">'+def.name+(isParagon?' <span style="color:#4FB3A9;">(Paragon)</span>':'')+'</span>' +
     '<span class="sel-level-dots">'+dots+'</span>' +
     '<button class="sel-close" id="selCloseBtn" aria-label="Auswahl schließen">✕</button></div>' +
     '<div class="sel-stats">'+towerStatsHtml(def, lvl)+'</div>' +
@@ -2425,13 +2588,18 @@ function syncSelectionPanel(){
         ? (blockedByLvl4
             ? '<button class="btn btn-primary" id="selUpgradeBtn" disabled>⬆ Stufe-4-Limit erreicht ('+level4Count()+'/'+MAX_LEVEL4_TOWERS+')</button>'
             : '<button class="btn btn-primary" id="selUpgradeBtn"'+(state.kohle<nextLvl.upgradeCost?' disabled':'')+'>⬆ Upgrade (🪨'+nextLvl.upgradeCost+')</button>')
-        : '<span class="hint-strip" style="align-self:center;">Maximale Stufe erreicht</span>') +
+        : isParagon
+          ? '<span class="hint-strip" style="align-self:center;">💎 Paragon – Maximalstufe</span>'
+          : fuseEligible
+            ? '<button class="btn btn-primary" id="selFuseBtn"'+(state.kohle<fuseCost?' disabled':'')+'>💎 Zu Paragon verschmelzen (🪨'+fuseCost+')</button>'
+            : '<span class="hint-strip" style="align-self:center;">Maximale Stufe erreicht</span>') +
       '<button class="btn btn-danger" id="selSellBtn">💰 Verkaufen (+🪨'+refund+')</button>' +
     '</div>';
 
   dom.selectionPanel.classList.add('show');
   $('selCloseBtn').addEventListener('click', () => { state.selectedTowerId = null; syncSelectionPanel(); });
   if (nextLvl) $('selUpgradeBtn').addEventListener('click', () => upgradeTower(tw.id));
+  if (fuseEligible) $('selFuseBtn').addEventListener('click', () => fuseParagon(tw.id));
   $('selSellBtn').addEventListener('click', () => sellTower(tw.id));
 }
 
@@ -2460,15 +2628,22 @@ function upgradeTower(id){
    dabei ausgetauscht wurde - siehe Bugfix). */
 function refreshSelectionAffordability(){
   if (!state.selectedTowerId) return;
-  const btn = document.getElementById('selUpgradeBtn');
-  if (!btn) return;
   const tw = state.towers.find(t => t.id === state.selectedTowerId);
   if (!tw) return;
   const def = TOWER_TYPES[tw.type];
-  const nextLvl = def.levels[tw.level+1];
-  if (!nextLvl) return;
-  const blockedByLvl4 = (tw.level+1 === LEVEL4_INDEX) && level4LimitReached();
-  btn.disabled = blockedByLvl4 || state.kohle < nextLvl.upgradeCost;
+  const btn = document.getElementById('selUpgradeBtn');
+  if (btn){
+    const nextLvl = def.levels[tw.level+1];
+    if (nextLvl){
+      const blockedByLvl4 = (tw.level+1 === LEVEL4_INDEX) && level4LimitReached();
+      btn.disabled = blockedByLvl4 || state.kohle < nextLvl.upgradeCost;
+    }
+  }
+  const fuseBtn = document.getElementById('selFuseBtn');
+  if (fuseBtn && tw.level === LEVEL4_INDEX){
+    const cost = paragonFusionCost(tw, sameTypeLevel4Others(tw).slice(0, PARAGON_FUSION_COUNT-1));
+    fuseBtn.disabled = state.kohle < cost;
+  }
 }
 
 function sellTower(id){
