@@ -1591,7 +1591,10 @@ function checkGameOver(){
    BESTENLISTEN (localStorage, getrennt pro Karte + Schwierigkeitsgrad -
    jede Karte gehoert genau einem Schwierigkeitsgrad, siehe DIFFICULTY_TIERS)
    ========================================================= */
-const HIGHSCORE_KEY = 'glutfront_highscores_v1';
+/* v2 statt v1: die alte Datei glutfront-v1-vor-balance-update.html liegt noch live im
+   selben Repo/Origin und schrieb denselben Key - localStorage ist pro Origin, nicht pro
+   Datei, das fuehrte dazu dass frische Besucher scheinbar schon eine Bestenliste hatten. */
+const HIGHSCORE_KEY = 'glutfront_highscores_v2';
 const HIGHSCORE_MAX = 5;
 
 function loadHighscores(){
