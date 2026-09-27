@@ -2903,33 +2903,58 @@ function buildAtmoBackground(){
     c.beginPath(); c.arc(x, y, 0.8 + rnd()*1.8, 0, Math.PI*2); c.fill();
   }
   c.restore();
+  /* Schienen (Fix 092726): Die erste Fassung verschob jeden Eckpunkt entlang der
+     gemittelten Normalen, ohne Gehrungskorrektur - in 90-Grad-Kurven rueckten die
+     Schienen dadurch zusammen und liefen schraeg. Jetzt: Schienenpaar als Differenz
+     zweier Striche (breit minus schmal) auf einer eigenen Ebene. Das haelt den
+     Abstand in jeder Kurve exakt. Anfang und Ende laufen bis zum Kartenrand bzw.
+     bis in den Ofen, statt in der Zellmitte abzubrechen. */
   const wp = state.waypoints;
-  for (let i = 0; i < wp.length - 1; i++){
-    const a = wp[i], b = wp[i+1];
+  const ext = wp.map(p => ({ x: p.x, y: p.y }));
+  if (ext.length >= 2){
+    const e0 = ext[0], e1 = ext[1];
+    const l0 = Math.hypot(e1.x - e0.x, e1.y - e0.y) || 1;
+    ext[0] = { x: e0.x - (e1.x - e0.x)/l0 * CELL, y: e0.y - (e1.y - e0.y)/l0 * CELL };
+  }
+  const RAIL_GAP = 8;
+  const tracePts = (cc, pts) => { cc.beginPath(); pts.forEach((p, i) => i ? cc.lineTo(p.x, p.y) : cc.moveTo(p.x, p.y)); };
+  // Schwellen: pro Segment gleichmaessig, Kurvenbereich frei lassen und dort eine Diagonal-Schwelle setzen
+  const sleeper = (x, y, nx, ny, ux, uy) => {
+    c.strokeStyle = '#4E3620'; c.lineWidth = 5;
+    c.beginPath(); c.moveTo(x - nx*13, y - ny*13); c.lineTo(x + nx*13, y + ny*13); c.stroke();
+    c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(x - nx*13 + ux*2.5, y - ny*13 + uy*2.5); c.lineTo(x + nx*13 + ux*2.5, y + ny*13 + uy*2.5); c.stroke();
+  };
+  for (let i = 0; i < ext.length - 1; i++){
+    const a = ext[i], b = ext[i+1];
     const len = Math.hypot(b.x - a.x, b.y - a.y); if (len < 1) continue;
     const ux = (b.x - a.x)/len, uy = (b.y - a.y)/len, nx = -uy, ny = ux;
-    for (let d = 6; d < len; d += 13){
-      const x = a.x + ux*d, y = a.y + uy*d;
-      c.strokeStyle = '#4E3620'; c.lineWidth = 5;
-      c.beginPath(); c.moveTo(x - nx*13, y - ny*13); c.lineTo(x + nx*13, y + ny*13); c.stroke();
-      c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 1;
-      c.beginPath(); c.moveTo(x - nx*13 + ux*2.5, y - ny*13 + uy*2.5); c.lineTo(x + nx*13 + ux*2.5, y + ny*13 + uy*2.5); c.stroke();
+    const startPad = i === 0 ? 0 : 14, endPad = i === ext.length - 2 ? 0 : 14;
+    const usable = len - startPad - endPad;
+    const n = Math.max(1, Math.round(usable / 13));
+    for (let k = 0; k <= n; k++){
+      const d = startPad + usable * k / n;
+      sleeper(a.x + ux*d, a.y + uy*d, nx, ny, ux, uy);
+    }
+    if (i > 0){
+      const p = ext[i], q = ext[i-1];
+      const lq = Math.hypot(p.x - q.x, p.y - q.y) || 1;
+      const vx = (p.x - q.x)/lq + ux, vy = (p.y - q.y)/lq + uy, lv = Math.hypot(vx, vy) || 1;
+      sleeper(p.x, p.y, -vy/lv, vx/lv, vx/lv, vy/lv);
     }
   }
-  for (const off of [-8, 8]){
-    c.save(); c.translate(0, 0);
-    c.beginPath(); c.moveTo(wp[0].x + 0, wp[0].y + 0);
-    for (let i = 0; i < wp.length; i++){
-      const p = wp[i], prev = wp[Math.max(0, i-1)], next = wp[Math.min(wp.length-1, i+1)];
-      let dx = next.x - prev.x, dy = next.y - prev.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-      const x = p.x - dy*off, y = p.y + dx*off;
-      i ? c.lineTo(x, y) : c.moveTo(x, y);
-    }
-    c.lineJoin = 'round';
-    c.strokeStyle = '#2A2724'; c.lineWidth = 3.2; c.stroke();
-    c.strokeStyle = 'rgba(200,190,175,0.35)'; c.lineWidth = 1; c.stroke();
-    c.restore();
-  }
+  const railCv = document.createElement('canvas');
+  railCv.width = cv.width; railCv.height = cv.height;
+  const rc = railCv.getContext('2d');
+  rc.scale(SS, SS); rc.lineJoin = 'round'; rc.lineCap = 'butt';
+  tracePts(rc, ext); rc.strokeStyle = '#2E2A26'; rc.lineWidth = RAIL_GAP*2 + 3.4; rc.stroke();
+  rc.globalCompositeOperation = 'destination-out';
+  tracePts(rc, ext); rc.lineWidth = RAIL_GAP*2 - 3.4; rc.stroke();
+  // Glanzkante auf beiden Schienen
+  rc.globalCompositeOperation = 'source-atop';
+  tracePts(rc, ext); rc.strokeStyle = 'rgba(215,205,190,0.45)'; rc.lineWidth = RAIL_GAP*2 + 1.2; rc.stroke();
+  tracePts(rc, ext); rc.strokeStyle = '#2E2A26'; rc.lineWidth = RAIL_GAP*2 - 1.2; rc.stroke();
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(railCv, 0, 0); c.restore();
 
   // 7) Truemmerfelder der Karte (bestehende Zeichnung)
   state.blockedCells.forEach(k => { const [cc, rr] = k.split(',').map(Number); drawRubbleCell(c, cc, rr); });
