@@ -324,16 +324,28 @@
   }
 
   /* ===== Feedback-Formular ===== */
-  #feedbackModal textarea, #feedbackModal input[type="email"]{
+  #feedbackModal textarea, #feedbackModal input[type="email"], #ratingSection textarea{
     width:100%; background:var(--seam-slate-2); border:1px solid rgba(232,116,42,0.3); border-radius:8px;
     color:var(--parchment); padding:8px 10px; font-size:14px; font-family:inherit; margin-bottom:8px;
     box-sizing:border-box;
   }
   #feedbackModal textarea{resize:vertical; min-height:90px;}
+  #ratingSection textarea{resize:vertical; min-height:56px;}
   .feedback-status{font-size:13px; margin:2px 0 6px; min-height:16px;}
   .feedback-status.success{color:var(--frost-teal);}
   .feedback-status.error{color:var(--forge-red);}
   .feedback-hp{display:none !important;}
+  /* ===== Rundenbewertung (Branch feedback-context, 092726) =====
+     Optionale 1-5-Sterne-Bewertung + Kommentar direkt im Game-Over-Modal - separat
+     vom Feedback-Formular, weil sie im Ergebnis-Moment gefragt wird statt ueber
+     einen eigens zu findenden Knopf. */
+  .rating-stars{display:flex; gap:4px; margin-bottom:8px;}
+  .rating-star{
+    background:none; border:none; padding:2px 3px; font-size:24px; line-height:1;
+    color:rgba(237,227,211,0.25); cursor:pointer; transition:color 0.12s;
+  }
+  .rating-star:hover, .rating-star:focus-visible{color:rgba(240,180,41,0.65);}
+  .rating-star.active{color:var(--molten-gold);}
   .hs-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;}
   .hs-list li{
     display:flex; gap:8px; align-items:baseline; background:var(--seam-slate-2); border-radius:6px;
@@ -560,6 +572,25 @@
       </div>
       <ol class="hs-list" id="hsList"></ol>
     </div>
+    <div id="ratingSection" style="margin:14px 0 6px;">
+      <div class="section-label" style="width:auto; margin-bottom:6px;">Wie war die Runde? (optional)</div>
+      <div id="ratingInput">
+        <div class="rating-stars" id="ratingStars" role="group" aria-label="Bewertung von 1 bis 5 Sternen">
+          <button type="button" class="rating-star" data-value="1" aria-label="1 Stern">★</button>
+          <button type="button" class="rating-star" data-value="2" aria-label="2 Sterne">★</button>
+          <button type="button" class="rating-star" data-value="3" aria-label="3 Sterne">★</button>
+          <button type="button" class="rating-star" data-value="4" aria-label="4 Sterne">★</button>
+          <button type="button" class="rating-star" data-value="5" aria-label="5 Sterne">★</button>
+        </div>
+        <textarea id="ratingNote" maxlength="300" placeholder="Kurzer Kommentar (optional)"></textarea>
+        <input type="text" id="ratingHp" class="feedback-hp" tabindex="-1" autocomplete="off">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="ratingSendBtn">Bewertung senden</button>
+          <span class="feedback-status" id="ratingStatus"></span>
+        </div>
+      </div>
+      <p class="feedback-status success" id="ratingThanks" style="display:none;">Danke fuer deine Bewertung!</p>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-primary" id="continueEndlessBtn" style="display:none;">▶ Weiterspielen</button>
       <button class="btn btn-primary" id="retryBtn">↺ Nochmal versuchen</button>
@@ -632,6 +663,9 @@ const WAVE_AUTOSTART_SECONDS = 15;
    ========================================================= */
 /* Formspree-Formular "GLUTFRONT Feedback", eingerichtet von Darius mit d.holzknecht@icloud.com. */
 const FEEDBACK_ENDPOINT = "https://formspree.io/f/mwvgyglj";
+/* Versionskennung fuer Feedback-Mails (Branch feedback-context, 092726) - von Hand
+   hochzaehlen bei sichtbaren Aenderungen, kein Build-Tooling noetig. */
+const APP_VERSION = 'v2';
 const TUTORIAL_MAP_KEY = 'tutorial'; // Schluessel der Tutorial-Karte in MAPS, siehe Feedback 30
 
 /* Schwierigkeitsgrad koppelt Kartengeometrie UND Wellen-Formel (siehe
@@ -1507,6 +1541,14 @@ const dom = {
   endlessInfoModal: $('endlessInfoModal'),
   endlessInfoOkBtn: $('endlessInfoOkBtn'),
 
+  ratingInput: $('ratingInput'),
+  ratingStars: $('ratingStars'),
+  ratingNote: $('ratingNote'),
+  ratingHp: $('ratingHp'),
+  ratingSendBtn: $('ratingSendBtn'),
+  ratingStatus: $('ratingStatus'),
+  ratingThanks: $('ratingThanks'),
+
   openTutorialBtn: $('openTutorialBtn'),
   tutorialHintModal: $('tutorialHintModal'),
   tutorialHintTitle: $('tutorialHintTitle'),
@@ -2056,6 +2098,7 @@ function triggerDefeat(){
      Endlos-Wellen - ist immer ein echtes Ende, nie eine Zwischenstation. */
   dom.continueEndlessBtn.style.display = 'none';
   fillGameOverStats();
+  resetRatingUI();
   dom.gameOverModal.classList.add('show');
 }
 function triggerVictory(){
@@ -2072,6 +2115,7 @@ function triggerVictory(){
      Feedback 30) - Knopf bleibt dort verborgen, "Kartenauswahl" fuehrt direkt zu den echten Karten. */
   dom.continueEndlessBtn.style.display = isTutorial ? 'none' : '';
   fillGameOverStats();
+  resetRatingUI();
   dom.gameOverModal.classList.add('show');
 }
 
@@ -3772,6 +3816,91 @@ function closeFeedbackModal(){
   }
 }
 
+/* Technische Daten, die jeder Feedback-Versand automatisch mitschickt (Branch
+   feedback-context, 092726): Karte, Schwierigkeit, Welle, Endlos-Modus, Ergebnis,
+   Steuerung, Versionskennung. Macht Feedback einer konkreten Situation zuordenbar,
+   ohne dass Spieler das selbst beschreiben muessen. Bleibt anonym - keine
+   Geraete-ID, keine IP, kein Tracking ueber eine Runde hinaus. */
+function buildFeedbackContext(){
+  const inGame = state.screen === 'game' && !!state.mapKey;
+  const map = inGame ? MAPS[state.mapKey] : null;
+  const tierCfg = map ? DIFFICULTY_TIERS[map.tier] : null;
+  const ctx = {
+    version: APP_VERSION,
+    karte: map ? map.name : '(kein Spiel aktiv)',
+    schwierigkeit: tierCfg ? tierCfg.label : '',
+    welle: inGame ? (state.waveNumber + (state.endlessMode ? ' (Endlos)' : ' / ' + mapTotalWaves(state.mapKey))) : '',
+    ergebnis: state.gameEnded ? (state.lives <= 0 ? 'Niederlage' : 'Sieg') : (inGame ? 'laeuft noch' : ''),
+    steuerung: state.effectiveTouch ? 'Touch' : 'Maus/Tastatur'
+  };
+  ctx.kontext = 'GLUTFRONT ' + ctx.version + ' · ' + ctx.karte +
+    (ctx.schwierigkeit ? ' (' + ctx.schwierigkeit + ')' : '') +
+    (ctx.welle ? ' · Welle ' + ctx.welle : '') +
+    (ctx.ergebnis ? ' · ' + ctx.ergebnis : '') +
+    ' · ' + ctx.steuerung;
+  return ctx;
+}
+
+/* ---- Rundenbewertung: 1-5 Sterne + optionaler Kommentar im Game-Over-Modal ---- */
+let selectedRating = 0;
+function updateRatingStars(){
+  document.querySelectorAll('.rating-star').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.value) <= selectedRating);
+  });
+}
+function resetRatingUI(){
+  selectedRating = 0;
+  updateRatingStars();
+  dom.ratingNote.value = '';
+  dom.ratingStatus.textContent = ''; dom.ratingStatus.className = 'feedback-status';
+  dom.ratingInput.style.display = '';
+  dom.ratingThanks.style.display = 'none';
+  dom.ratingSendBtn.disabled = false;
+  dom.ratingSendBtn.textContent = 'Bewertung senden';
+}
+function showRatingStatus(msg, kind){
+  dom.ratingStatus.textContent = msg;
+  dom.ratingStatus.className = 'feedback-status' + (kind ? ' ' + kind : '');
+}
+async function sendRating(){
+  if (!selectedRating){
+    showRatingStatus('Bitte zuerst eine Bewertung waehlen.', 'error');
+    return;
+  }
+  if (!FEEDBACK_ENDPOINT || FEEDBACK_ENDPOINT.indexOf('PLACEHOLDER') === 0){
+    showRatingStatus('Feedback-Versand ist noch nicht eingerichtet.', 'error');
+    return;
+  }
+  dom.ratingSendBtn.disabled = true;
+  dom.ratingSendBtn.textContent = 'Sende…';
+  showRatingStatus('', '');
+  try {
+    const payload = Object.assign({
+      _subject: 'GLUTFRONT Rundenbewertung',
+      bewertung: selectedRating + '/5',
+      kommentar: dom.ratingNote.value.trim(),
+      _gotcha: dom.ratingHp.value
+    }, buildFeedbackContext());
+    const res = await fetch(FEEDBACK_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok){
+      dom.ratingInput.style.display = 'none';
+      dom.ratingThanks.style.display = '';
+    } else {
+      showRatingStatus('Senden fehlgeschlagen (Server antwortete mit Fehler).', 'error');
+      dom.ratingSendBtn.disabled = false;
+      dom.ratingSendBtn.textContent = 'Bewertung senden';
+    }
+  } catch(err){
+    showRatingStatus('Senden fehlgeschlagen (keine Verbindung).', 'error');
+    dom.ratingSendBtn.disabled = false;
+    dom.ratingSendBtn.textContent = 'Bewertung senden';
+  }
+}
+
 async function submitFeedback(evt){
   evt.preventDefault();
   const text = dom.feedbackText.value.trim();
@@ -3790,12 +3919,12 @@ async function submitFeedback(evt){
     /* JSON statt FormData: kein Seiten-Reload, kein SDK/CDN-Script noetig - Formspree
        akzeptiert POST mit application/json genauso wie multipart/form-data. _gotcha
        bleibt als Spam-Honeypot erhalten, nur jetzt im JSON-Body statt im Formdata. */
-    const payload = {
+    const payload = Object.assign({
       message: text,
       email: dom.feedbackEmail.value.trim(),
       _subject: 'GLUTFRONT Feedback',
       _gotcha: dom.feedbackForm.elements['_gotcha'].value
-    };
+    }, buildFeedbackContext());
     const res = await fetch(FEEDBACK_ENDPOINT, {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -3854,6 +3983,14 @@ function wireEvents(){
   dom.feedbackBtn.addEventListener('click', openFeedbackModal);
   dom.closeFeedbackBtn.addEventListener('click', closeFeedbackModal);
   dom.feedbackForm.addEventListener('submit', submitFeedback);
+
+  dom.ratingStars.addEventListener('click', (evt) => {
+    const btn = evt.target.closest('.rating-star');
+    if (!btn) return;
+    selectedRating = Number(btn.dataset.value);
+    updateRatingStars();
+  });
+  dom.ratingSendBtn.addEventListener('click', sendRating);
 
   dom.pauseBtn.addEventListener('click', () => {
     if (state.gameEnded) return;
