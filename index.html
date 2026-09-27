@@ -172,6 +172,8 @@
   #buildMenu{ grid-area:buildmenu; }
   #controlHint{ grid-area:hint; }
   #startScreen.hidden{display:none;}
+  /* Aufsteigende Glutfunken hinter der gesamten Seite (Branch redesign) */
+  #menuFx{position:fixed; inset:0; width:100vw; height:100vh; z-index:-1; pointer-events:none;}
 
   #topbar{
     display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
@@ -426,6 +428,7 @@
 <body>
 <div id="app">
 
+  <canvas id="menuFx" aria-hidden="true"></canvas>
   <div id="startScreen">
     <div class="brand-row"><span class="brand-icon">🔥</span></div>
     <h1 class="start-title">GLUTFRONT</h1>
@@ -1003,6 +1006,7 @@ const Sound = (() => {
         musicGain = ctx.createGain();
         musicGain.gain.value = 0.5; // Musik bleibt leiser als SFX - Atmosphaere, kein Vordergrund
         musicGain.connect(masterGain);
+        buildMusicGraph(ctx);
       } catch(e){ ctx = null; }
     }
     if (ctx && ctx.state === 'suspended') ctx.resume().catch(()=>{});
@@ -1029,78 +1033,288 @@ const Sound = (() => {
     } catch(e) { /* audio best-effort only */ }
   }
 
-  /* ---- Hintergrundmusik: warme Pads + sparsame Melodie (C418-Einfluss) ----
-     Am7-Fmaj7-Cmaj7-G, 4 Takte a 4s, bewusst luekenhafte Melodie statt
-     Dauer-Beat - Atmosphaere statt Vordergrund-Musik. */
-  function playPad(freq, startTime, duration, volume){
-    const c = ctx;
-    const osc = c.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.value = freq;
-    const filter = c.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = 1200;
-    const gain = c.createGain();
-    gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(volume, startTime + 0.6);
-    gain.gain.setValueAtTime(volume, startTime + duration - 0.8);
-    gain.gain.linearRampToValueAtTime(0, startTime + duration);
-    osc.connect(filter); filter.connect(gain); gain.connect(musicGain);
-    osc.start(startTime); osc.stop(startTime + duration + 0.1);
-  }
-  function playMelodyNote(freq, startTime, duration, volume){
-    const c = ctx;
-    const osc = c.createOscillator();
-    osc.type = 'square';
-    osc.frequency.value = freq;
-    const filter = c.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = 2200;
-    const gain = c.createGain();
-    gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(volume, startTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-    osc.connect(filter); filter.connect(gain); gain.connect(musicGain);
-    osc.start(startTime); osc.stop(startTime + duration + 0.05);
+  /* ---- Hintergrundmusik v2 (Branch redesign, 092726) ----
+     Adaptive Stollen-Musik statt fester 16-s-Schleife:
+     - Grundton-Drone (A1/E2) durch langsam wanderndes Tiefpassfilter
+     - warme Pads (verstimmte Saegezahn-Paare), Akkord pro Takt
+     - Kalimba-/Glocken-Melodie (FM) aus A-Moll-Pentatonik mit Motiv-Gedaechtnis,
+       damit sich Phrasen wiederholen und variieren statt zufaellig zu klingen
+     - Schmiede-Percussion (Pauke, Amboss, Shaker) nur im Kampf
+     - Hoehlen-Ambience: Wind, Wassertropfen, ferne Spitzhacke
+     - Faltungshall (generierte Impulsantwort) als "Stollen-Raum" fuer Musik, Ambience und SFX
+     Drei Intensitaeten, weich ueberblendet: 0 Ruhe (Menue/Bauphase), 1 Kampf (Welle), 2 Boss. */
+  const BPM = 72, BEAT = 60 / BPM;
+  let musicBus = null, reverb = null, ambGain = null, noiseBuf = null;
+  let layer = null;
+  let intensity = 0;
+  let schedTimer = null, ambTimer = null, nextBeatTime = 0, beatIndex = 0;
+  let droneNodes = null, windNodes = null;
+  let motif = null, motifAge = 0, lastMelIdx = 4;
+
+  const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+  // Am F C G | Am Em F G  (ein Akkord pro Takt, 8 Takte = 26,7 s)
+  const PROG_CALM = [[57,60,64],[53,57,60],[48,52,55],[55,59,62],[57,60,64],[52,55,59],[53,57,60],[55,59,62]];
+  // Am Bb Am E - phrygisch-dunkel fuer Bosswellen
+  const PROG_BOSS = [[57,60,64],[58,62,65],[57,60,64],[52,56,59]];
+  const PENTA = [57,60,62,64,67,69,72,74,76,79];
+  const HARM  = [57,59,60,64,65,68,69,71,72,76];
+
+  const LAYER_BY_INTENSITY = [
+    { pad:1.0,  mel:1.0, arp:0.0, perc:0.0, drone:0.8 },
+    { pad:0.85, mel:0.9, arp:1.0, perc:1.0, drone:0.7 },
+    { pad:0.8,  mel:0.6, arp:1.0, perc:1.25, drone:1.25 }
+  ];
+
+  function makeImpulse(c, seconds, decay){
+    const len = Math.floor(c.sampleRate * seconds);
+    const buf = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/len, decay);
+    }
+    return buf;
   }
 
-  const NOTE = { C3:130.81, E3:164.81, G3:196.00, F3:174.61, B3:246.94,
-                 A3:220.00, C4:261.63, D4:293.66, E4:329.63, A4:440.00, G4:392.00 };
-  const CHORDS = [
-    [NOTE.A3, NOTE.C4, NOTE.E4, NOTE.G4], // Am7
-    [NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], // Fmaj7
-    [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.C4], // Cmaj7
-    [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.G4]  // G
-  ];
-  const MELODY = [
-    { note:NOTE.E4, beat:0.5,  dur:1.2 },
-    { note:NOTE.G4, beat:2.5,  dur:1.0 },
-    { note:NOTE.C4, beat:8.5,  dur:1.5 },
-    { note:NOTE.A4, beat:11.0, dur:1.0 },
-    { note:NOTE.G4, beat:13.5, dur:1.2 }
-  ];
-  const BAR_DURATION = 4;
-  const LOOP_DURATION = CHORDS.length * BAR_DURATION;
+  function buildMusicGraph(c){
+    noiseBuf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random()*2 - 1;
 
-  function scheduleLoop(startTime){
-    CHORDS.forEach((chord, i) => {
-      const barStart = startTime + i*BAR_DURATION;
-      chord.forEach(freq => playPad(freq, barStart, BAR_DURATION*1.1, 0.05));
+    reverb = c.createConvolver();
+    reverb.buffer = makeImpulse(c, 3.6, 2.4);
+    const revOut = c.createGain(); revOut.gain.value = 0.55;
+    reverb.connect(revOut); revOut.connect(masterGain);
+
+    musicBus = c.createGain(); musicBus.gain.value = 0;
+    musicBus.connect(musicGain);
+    const musicSend = c.createGain(); musicSend.gain.value = 0.5;
+    musicGain.connect(musicSend); musicSend.connect(reverb);
+
+    const sfxSend = c.createGain(); sfxSend.gain.value = 0.18; // SFX klingen "im Stollen"
+    sfxGain.connect(sfxSend); sfxSend.connect(reverb);
+
+    ambGain = c.createGain(); ambGain.gain.value = 0.9;
+    ambGain.connect(masterGain);
+    const ambSend = c.createGain(); ambSend.gain.value = 0.9;
+    ambGain.connect(ambSend); ambSend.connect(reverb);
+
+    layer = {};
+    const init = LAYER_BY_INTENSITY[0];
+    for (const k of Object.keys(init)){
+      layer[k] = c.createGain(); layer[k].gain.value = init[k]; layer[k].connect(musicBus);
+    }
+  }
+
+  function envGain(c, t, attack, peak, release, dest){
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + release);
+    g.connect(dest);
+    return g;
+  }
+
+  function padChord(notes, t, dur, bright){
+    const c = ctx;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(bright ? 1300 : 750, t); lp.Q.value = 0.6;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.028, t + 1.2);
+    g.gain.setValueAtTime(0.028, t + dur - 1.4);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    lp.connect(g); g.connect(layer.pad);
+    for (const n of notes){
+      for (const det of [-7, 7]){
+        const o = c.createOscillator(); o.type = 'sawtooth';
+        o.frequency.value = midi(n); o.detune.value = det;
+        o.connect(lp); o.start(t); o.stop(t + dur + 0.1);
+      }
+    }
+  }
+
+  function bell(n, t, vol){
+    const c = ctx, f = midi(n);
+    const car = c.createOscillator(); car.type = 'sine'; car.frequency.value = f;
+    const mod = c.createOscillator(); mod.type = 'sine'; mod.frequency.value = f * 3.5;
+    const mg = c.createGain();
+    mg.gain.setValueAtTime(f * 1.4, t); mg.gain.exponentialRampToValueAtTime(1, t + 0.5);
+    mod.connect(mg); mg.connect(car.frequency);
+    car.connect(envGain(c, t, 0.006, vol, 2.4, layer.mel));
+    car.start(t); mod.start(t); car.stop(t + 2.6); mod.stop(t + 2.6);
+  }
+
+  function pluck(n, t, vol){
+    const c = ctx;
+    const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = midi(n);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2600, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.3);
+    o.connect(lp); lp.connect(envGain(c, t, 0.004, vol, 0.4, layer.arp));
+    o.start(t); o.stop(t + 0.5);
+  }
+
+  function kick(t, vol){
+    const c = ctx;
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(115, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.22);
+    o.connect(envGain(c, t, 0.004, vol, 0.55, layer.perc));
+    o.start(t); o.stop(t + 0.6);
+  }
+
+  function anvil(t, vol, dest){
+    const c = ctx;
+    // unharmonische Teiltöne = metallischer Hammerschlag auf Amboss
+    [[1020, 1, 0.7], [2790, 0.5, 0.35], [5230, 0.25, 0.18]].forEach(([f, a, d]) => {
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f * (0.99 + Math.random()*0.02);
+      o.connect(envGain(c, t, 0.002, vol * a, d, dest || layer.perc));
+      o.start(t); o.stop(t + d + 0.05);
     });
-    MELODY.forEach(({note, beat, dur}) => playMelodyNote(note, startTime + beat, dur, 0.06));
+  }
+
+  function noiseHit(t, vol, hp, dur, dest){
+    const c = ctx;
+    const s = c.createBufferSource(); s.buffer = noiseBuf;
+    const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+    s.connect(f); f.connect(envGain(c, t, 0.003, vol, dur, dest || layer.perc));
+    s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.05);
+  }
+
+  function newMotif(scale){
+    const m = [];
+    let idx = lastMelIdx;
+    for (let s = 0; s < 16; s++){
+      const density = intensity === 0 ? 0.28 : 0.36;
+      if (Math.random() < density || s === 0){
+        idx = clamp(idx + [-2,-1,-1,1,1,2,0][Math.floor(Math.random()*7)], 0, scale.length - 1);
+        m.push(idx);
+      } else m.push(null);
+    }
+    lastMelIdx = idx;
+    return m;
+  }
+
+  function scheduleBeat(i, t){
+    const boss = intensity === 2;
+    const prog = boss ? PROG_BOSS : PROG_CALM;
+    const scale = boss ? HARM : PENTA;
+    const bar = Math.floor(i / 4), beat = i % 4;
+    const chord = prog[bar % prog.length];
+
+    if (beat === 0){
+      padChord(chord, t, BEAT * 4 + 1.4, intensity > 0);
+      if (bar % 8 === 0){
+        motifAge++;
+        // alle 8 Takte: neues Motiv oder Variation des alten (Wiedererkennung statt Zufall)
+        if (!motif || motifAge % 2 === 0) motif = newMotif(scale);
+        else motif = motif.map(v => (v != null && Math.random() < 0.25) ? clamp(v + (Math.random()<0.5?-1:1), 0, scale.length-1) : v);
+      }
+    }
+
+    // Melodie: in Ruhe jede 4. Phrase Pause, damit Luft bleibt
+    const phrase = Math.floor(bar / 8) % 4;
+    const melOn = !(intensity === 0 && phrase === 3);
+    for (let k = 0; k < 2; k++){
+      const tt = t + k * BEAT / 2;
+      const slot = (bar % 2) * 8 + beat * 2 + k;
+      if (melOn && motif && motif[slot] != null) bell(scale[motif[slot]], tt, boss ? 0.035 : 0.05);
+      if (intensity > 0){
+        const arpNote = chord[(beat * 2 + k) % chord.length] + 12;
+        pluck(arpNote, tt, 0.022);
+        if (k === 1) noiseHit(tt, 0.012, 7000, 0.05);
+      }
+    }
+
+    if (intensity > 0){
+      if (beat === 0 || beat === 2 || boss) kick(t, boss && beat % 2 ? 0.14 : 0.2);
+      if (boss && beat === 3) kick(t + BEAT/2, 0.12);
+      if ((beat === 3 && bar % 2 === 1) || (boss && beat === 1)) anvil(t, 0.03);
+    }
+  }
+
+  function startDrone(){
+    const c = ctx;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 200; lp.Q.value = 1.2;
+    const lfo = c.createOscillator(); lfo.frequency.value = 0.045;
+    const lfoG = c.createGain(); lfoG.gain.value = 70;
+    lfo.connect(lfoG); lfoG.connect(lp.frequency);
+    const g = c.createGain(); g.gain.value = 0.05;
+    lp.connect(g); g.connect(layer.drone);
+    const oscs = [55, 55.3, 82.41].map(f => { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); return o; });
+    lfo.start();
+    droneNodes = { oscs, lfo, lp };
+  }
+
+  function startWind(){
+    const c = ctx;
+    const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 380; bp.Q.value = 0.9;
+    const lfo = c.createOscillator(); lfo.frequency.value = 0.06;
+    const lfoG = c.createGain(); lfoG.gain.value = 220;
+    lfo.connect(lfoG); lfoG.connect(bp.frequency);
+    const g = c.createGain(); g.gain.value = 0.045;
+    const lfo2 = c.createOscillator(); lfo2.frequency.value = 0.11;
+    const lfo2G = c.createGain(); lfo2G.gain.value = 0.02;
+    lfo2.connect(lfo2G); lfo2G.connect(g.gain);
+    src.connect(bp); bp.connect(g); g.connect(ambGain);
+    src.start(); lfo.start(); lfo2.start();
+    windNodes = { src, lfo, lfo2 };
+  }
+
+  function ambientEvent(){
+    if (!ctx || soundMode === 'muted') return;
+    const c = ctx, t = c.currentTime + 0.05;
+    const r = Math.random();
+    if (r < 0.7){
+      // Wassertropfen: kurzer, nach oben gleitender Sinus-"Plink"
+      const f = 1300 + Math.random() * 1400;
+      const o = c.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.7, t + 0.06);
+      o.connect(envGain(c, t, 0.003, 0.035, 0.22, ambGain));
+      o.start(t); o.stop(t + 0.3);
+    } else {
+      // ferne Spitzhacke: zwei bis drei leise Schlaege
+      const n = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < n; i++){
+        anvil(t + i * 0.55, 0.008, ambGain);
+        noiseHit(t + i * 0.55, 0.01, 2500, 0.08, ambGain);
+      }
+    }
+  }
+
+  function tick(){
+    const c = ctx;
+    if (!c) return;
+    while (nextBeatTime < c.currentTime + 0.35){
+      if (soundMode !== 'muted') scheduleBeat(beatIndex, nextBeatTime);
+      nextBeatTime += BEAT; beatIndex++;
+    }
   }
 
   function startMusic(){
     const c = ensureCtx();
-    if (!c) return;
-    stopMusic();
-    const schedule = () => {
-      const now = c.currentTime + 0.1;
-      scheduleLoop(now);
-      musicTimer = setTimeout(schedule, LOOP_DURATION * 1000);
-    };
-    schedule();
+    if (!c || schedTimer) return; // laeuft schon (Menue -> Karte blendet nahtlos weiter)
+    startDrone(); startWind();
+    musicBus.gain.cancelScheduledValues(c.currentTime);
+    musicBus.gain.setValueAtTime(musicBus.gain.value, c.currentTime);
+    musicBus.gain.linearRampToValueAtTime(1, c.currentTime + 4);
+    nextBeatTime = c.currentTime + 0.15; beatIndex = 0; motif = null;
+    schedTimer = setInterval(tick, 100);
+    const amb = () => { ambientEvent(); ambTimer = setTimeout(amb, 1500 + Math.random() * 4500); };
+    ambTimer = setTimeout(amb, 2000);
   }
   function stopMusic(){
-    if (musicTimer){ clearTimeout(musicTimer); musicTimer = null; }
+    if (schedTimer){ clearInterval(schedTimer); schedTimer = null; }
+    if (ambTimer){ clearTimeout(ambTimer); ambTimer = null; }
+    const stopAll = nodes => { if (nodes) Object.values(nodes).flat().forEach(n => { try { n.stop && n.stop(); } catch(e){} }); };
+    stopAll(droneNodes && { o: droneNodes.oscs, l: droneNodes.lfo }); droneNodes = null;
+    stopAll(windNodes); windNodes = null;
+  }
+  function setIntensity(level){
+    if (level === intensity || !ctx || !layer) { intensity = level; return; }
+    intensity = level;
+    const target = LAYER_BY_INTENSITY[level];
+    for (const k of Object.keys(target)) layer[k].gain.setTargetAtTime(target[k], ctx.currentTime, 1.2);
+    if (droneNodes) droneNodes.lp.frequency.setTargetAtTime(level === 2 ? 420 : 200, ctx.currentTime, 2);
   }
 
   function setSoundMode(mode){
@@ -1118,7 +1332,7 @@ const Sound = (() => {
     unlock(){ ensureCtx(); },
     setSoundMode, cycleSoundMode,
     getSoundMode(){ return soundMode; },
-    startMusic, stopMusic,
+    startMusic, stopMusic, setIntensity,
     shoot(){ beep(660, 0.06, 'square', 0.045); },
     hit(){ beep(220, 0.05, 'triangle', 0.05); },
     coin(){ beep(880, 0.09, 'sine', 0.06, 1200); },
@@ -1599,9 +1813,14 @@ function mainLoop(ts){
       refreshSelectionAffordability();
       checkTutorialHints();
     }
+    /* Musik-Intensitaet folgt dem Spielgeschehen: Ruhe in Menue/Bauphase, Kampf waehrend
+       einer Welle, Boss-Thema in Bosswellen (Branch redesign). */
+    Sound.setIntensity((state.screen !== 'game' || state.gameEnded || !state.waveActive) ? 0
+      : ((state.currentWaveData && state.currentWaveData.isBoss) ? 2 : 1));
     if (state.screen === 'game'){
       render();
     }
+    drawMenuFx();
   } catch (e) {
     console.error('Fehler im Spiel-Loop (wird übersprungen, Spiel läuft weiter):', e);
   }
@@ -1657,6 +1876,7 @@ function updateWaveSpawning(dt){
 }
 
 function spawnEnemy(type){
+  if (type === 'boss') atmoShake(5);
   const base = ENEMY_TYPES[type];
   const wave = state.currentWaveData;
   const start = state.waypoints[0];
@@ -2062,6 +2282,7 @@ function updateEnemies(dt){
       state.lives = Math.max(0, state.lives - e.livesCost); // nie unter 0 clampen (Feedback 27)
       spawnFloatText(e.x, e.y - 10, '−' + e.livesCost + ' ❤', '#FF6B4A');
       Sound.leak();
+      atmoShake(3);
       continue;
     }
     survivors.push(e);
@@ -2581,36 +2802,343 @@ function drawRubbleCell(c, col, row){
   c.restore();
 }
 
-function render(){
-  ctx.clearRect(0,0,GRID_W,GRID_H);
+/* =========================================================
+   ATMOSPHAERE (Branch redesign, 092726)
+   Detail-Hintergrund pro Karte (einmal vorgerendert und gecacht),
+   Grubenlicht (Dunkelheit mit Lichtkegeln), Staub/Glut in der Luft,
+   glimmende Kohleadern, Stolleneingang + Schmiedeofen statt Emoji,
+   leichtes Kameraschuetteln. Rein visuell - keine Spiellogik.
+   ========================================================= */
+const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const Atmo = {
+  bgKey: null, bg: null, veins: [],
+  light: null, lctx: null, vignette: null,
+  motes: [], lastT: 0, shake: 0, time: 0,
+  darkness: 0.4
+};
 
-  // Hintergrund-Raster
-  for (let row=0; row<ROWS; row++){
-    for (let col=0; col<COLS; col++){
-      const key = col+','+row;
-      const isPath = state.pathCells.has(key);
-      const isBlocked = state.blockedCells.has(key);
-      ctx.fillStyle = isPath ? '#3A2C20' : ((row+col)%2===0 ? '#1C1712' : '#1A1510');
-      ctx.fillRect(col*CELL, row*CELL, CELL, CELL);
-      if (isPath){
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-        ctx.strokeRect(col*CELL+0.5, row*CELL+0.5, CELL-1, CELL-1);
-      }
-      if (isBlocked) drawRubbleCell(ctx, col, row);
+function atmoRng(seedStr){
+  let h = 1779033703;
+  for (let i = 0; i < seedStr.length; i++){ h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  let a = h >>> 0;
+  return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+function atmoTracePath(c){
+  const wp = state.waypoints;
+  c.beginPath(); c.moveTo(wp[0].x, wp[0].y);
+  for (let i = 1; i < wp.length; i++) c.lineTo(wp[i].x, wp[i].y);
+}
+
+function buildAtmoBackground(){
+  const SS = 2; // Supersampling fuer scharfe Details auf HiDPI
+  const cv = document.createElement('canvas');
+  cv.width = GRID_W * SS; cv.height = GRID_H * SS;
+  const c = cv.getContext('2d');
+  c.scale(SS, SS);
+  const rnd = atmoRng(String(state.mapKey));
+
+  // 1) Felsboden: Grundton + leicht variierende Zellen
+  c.fillStyle = '#16110D'; c.fillRect(0, 0, GRID_W, GRID_H);
+  for (let row = 0; row < ROWS; row++) for (let col = 0; col < COLS; col++){
+    const v = Math.floor(rnd() * 10);
+    c.fillStyle = 'rgb(' + (26 + v) + ',' + (20 + v*0.8|0) + ',' + (15 + v*0.6|0) + ')';
+    c.fillRect(col*CELL, row*CELL, CELL, CELL);
+  }
+  // 2) Steinplatten: unregelmaessige Polygone, leicht heller mit dunkler Fuge
+  for (let i = 0; i < 70; i++){
+    const cx = rnd() * GRID_W, cy = rnd() * GRID_H, r = 18 + rnd() * 34;
+    c.beginPath();
+    for (let k = 0; k < 7; k++){
+      const a = (Math.PI*2/7)*k + rnd()*0.5, rr = r * (0.7 + rnd()*0.4);
+      const x = cx + Math.cos(a)*rr, y = cy + Math.sin(a)*rr*0.8;
+      k ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.closePath();
+    c.fillStyle = 'rgba(' + (60 + rnd()*30|0) + ',' + (48 + rnd()*20|0) + ',38,' + (0.10 + rnd()*0.12).toFixed(2) + ')';
+    c.fill();
+    c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 1.2; c.stroke();
+    c.strokeStyle = 'rgba(255,220,180,0.05)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cx - r*0.6, cy - r*0.5); c.lineTo(cx + r*0.3, cy - r*0.7); c.stroke();
+  }
+  // 3) Koernung
+  for (let i = 0; i < 5200; i++){
+    const light = rnd() < 0.35;
+    c.fillStyle = light ? 'rgba(255,230,200,' + (rnd()*0.06).toFixed(3) + ')' : 'rgba(0,0,0,' + (rnd()*0.25).toFixed(3) + ')';
+    c.fillRect(rnd()*GRID_W, rnd()*GRID_H, 1 + rnd()*1.5, 1 + rnd()*1.5);
+  }
+  // 4) Risse
+  c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1;
+  for (let i = 0; i < 16; i++){
+    let x = rnd()*GRID_W, y = rnd()*GRID_H;
+    c.beginPath(); c.moveTo(x, y);
+    for (let k = 0; k < 6; k++){ x += (rnd()-0.5)*30; y += (rnd()-0.5)*30; c.lineTo(x, y); }
+    c.stroke();
+  }
+  // 5) Kohleadern mit Glutpunkten (die Punkte glimmen spaeter animiert, siehe drawAtmoVeins)
+  Atmo.veins = [];
+  for (let i = 0; i < 5; i++){
+    let x = rnd()*GRID_W, y = rnd()*GRID_H;
+    const pts = [[x, y]];
+    for (let k = 0; k < 8; k++){ x += 14 + rnd()*22; y += (rnd()-0.5)*26; pts.push([x, y]); }
+    c.strokeStyle = '#0A0806'; c.lineWidth = 5 + rnd()*3; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath(); pts.forEach(([px, py], k) => k ? c.lineTo(px, py) : c.moveTo(px, py)); c.stroke();
+    c.strokeStyle = 'rgba(40,34,30,0.9)'; c.lineWidth = 1.5; c.stroke();
+    pts.forEach(([px, py]) => { if (rnd() < 0.55) Atmo.veins.push({ x: px + (rnd()-0.5)*4, y: py + (rnd()-0.5)*4, ph: rnd()*6.28, sp: 0.6 + rnd()*1.4 }); });
+  }
+
+  // 6) Weg: Schattenkante, gestampfte Erde, Kiesel, Holzschwellen, Schienen
+  c.lineCap = 'square'; c.lineJoin = 'miter';
+  atmoTracePath(c); c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = CELL + 10; c.stroke();
+  atmoTracePath(c); c.strokeStyle = '#3A2B1F'; c.lineWidth = CELL - 2; c.stroke();
+  c.save();
+  atmoTracePath(c); c.lineWidth = CELL - 2; c.strokeStyle = '#000';
+  // Clip auf den Weg ueber die gerasterten Wegzellen
+  c.beginPath();
+  state.pathCells.forEach(k => { const [cc, rr] = k.split(',').map(Number); c.rect(cc*CELL, rr*CELL, CELL, CELL); });
+  c.clip();
+  for (let i = 0; i < 2600; i++){
+    const x = rnd()*GRID_W, y = rnd()*GRID_H;
+    c.fillStyle = rnd() < 0.5 ? 'rgba(90,70,50,0.35)' : 'rgba(15,10,6,0.35)';
+    c.beginPath(); c.arc(x, y, 0.8 + rnd()*1.8, 0, Math.PI*2); c.fill();
+  }
+  c.restore();
+  const wp = state.waypoints;
+  for (let i = 0; i < wp.length - 1; i++){
+    const a = wp[i], b = wp[i+1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y); if (len < 1) continue;
+    const ux = (b.x - a.x)/len, uy = (b.y - a.y)/len, nx = -uy, ny = ux;
+    for (let d = 6; d < len; d += 13){
+      const x = a.x + ux*d, y = a.y + uy*d;
+      c.strokeStyle = '#4E3620'; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(x - nx*13, y - ny*13); c.lineTo(x + nx*13, y + ny*13); c.stroke();
+      c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(x - nx*13 + ux*2.5, y - ny*13 + uy*2.5); c.lineTo(x + nx*13 + ux*2.5, y + ny*13 + uy*2.5); c.stroke();
     }
   }
+  for (const off of [-8, 8]){
+    c.save(); c.translate(0, 0);
+    c.beginPath(); c.moveTo(wp[0].x + 0, wp[0].y + 0);
+    for (let i = 0; i < wp.length; i++){
+      const p = wp[i], prev = wp[Math.max(0, i-1)], next = wp[Math.min(wp.length-1, i+1)];
+      let dx = next.x - prev.x, dy = next.y - prev.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+      const x = p.x - dy*off, y = p.y + dx*off;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.lineJoin = 'round';
+    c.strokeStyle = '#2A2724'; c.lineWidth = 3.2; c.stroke();
+    c.strokeStyle = 'rgba(200,190,175,0.35)'; c.lineWidth = 1; c.stroke();
+    c.restore();
+  }
+
+  // 7) Truemmerfelder der Karte (bestehende Zeichnung)
+  state.blockedCells.forEach(k => { const [cc, rr] = k.split(',').map(Number); drawRubbleCell(c, cc, rr); });
+
+  // 8) Stolleneingang (Start): dunkles Loch mit Holzrahmen
+  const sp = wp[0];
+  const g = c.createRadialGradient(sp.x, sp.y, 2, sp.x, sp.y, 26);
+  g.addColorStop(0, '#000'); g.addColorStop(0.7, '#050403'); g.addColorStop(1, 'rgba(5,4,3,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(sp.x, sp.y, 26, 0, Math.PI*2); c.fill();
+  c.fillStyle = '#5A3D22'; c.strokeStyle = '#1E140B'; c.lineWidth = 1.5;
+  [[-20, -22, 6, 42], [14, -22, 6, 42], [-24, -26, 48, 7]].forEach(([dx, dy, w, h]) => {
+    c.fillRect(sp.x + dx, sp.y + dy, w, h); c.strokeRect(sp.x + dx, sp.y + dy, w, h);
+  });
+
+  // 9) Schmiedeofen (Ziel): Steinkuppel mit Feueroeffnung (Glut animiert in drawAtmoForge)
+  const bp = wp[wp.length - 1];
+  c.fillStyle = '#3B342D'; c.strokeStyle = '#15110D'; c.lineWidth = 2;
+  c.beginPath(); c.arc(bp.x, bp.y + 4, 21, Math.PI, 0); c.lineTo(bp.x + 21, bp.y + 16); c.lineTo(bp.x - 21, bp.y + 16); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.45)'; c.lineWidth = 1;
+  for (let k = 0; k < 5; k++){ c.beginPath(); c.arc(bp.x, bp.y + 4, 21 - k*0.1, Math.PI + k*0.6, Math.PI + k*0.6 + 0.02); c.lineTo(bp.x, bp.y + 4); c.stroke(); }
+  c.fillStyle = '#4A4038'; c.fillRect(bp.x + 8, bp.y - 26, 8, 14); c.strokeStyle = '#15110D'; c.strokeRect(bp.x + 8, bp.y - 26, 8, 14);
+  c.fillStyle = '#120C08';
+  c.beginPath(); c.arc(bp.x, bp.y + 8, 9, Math.PI, 0); c.lineTo(bp.x + 9, bp.y + 16); c.lineTo(bp.x - 9, bp.y + 16); c.closePath(); c.fill();
+
+  Atmo.bg = cv;
+  Atmo.bgKey = state.mapKey + '|' + state.blockedCells.size;
+
+  // Vignette einmal vorrendern
+  const vg = document.createElement('canvas'); vg.width = GRID_W; vg.height = GRID_H;
+  const vc = vg.getContext('2d');
+  const rg = vc.createRadialGradient(GRID_W/2, GRID_H/2, GRID_H*0.35, GRID_W/2, GRID_H/2, GRID_W*0.62);
+  rg.addColorStop(0, 'rgba(0,0,0,0)'); rg.addColorStop(1, 'rgba(0,0,0,0.6)');
+  vc.fillStyle = rg; vc.fillRect(0, 0, GRID_W, GRID_H);
+  Atmo.vignette = vg;
+
+  if (!Atmo.light){
+    Atmo.light = document.createElement('canvas');
+    Atmo.light.width = GRID_W; Atmo.light.height = GRID_H;
+    Atmo.lctx = Atmo.light.getContext('2d');
+  }
+  Atmo.motes = [];
+  for (let i = 0; i < 70; i++) Atmo.motes.push(newMote(true));
+}
+
+function newMote(anywhere){
+  const ember = Math.random() < 0.3;
+  const bp = state.waypoints[state.waypoints.length - 1];
+  const fromForge = ember && Math.random() < 0.5 && bp;
+  return {
+    ember,
+    x: fromForge ? bp.x + (Math.random()-0.5)*20 : Math.random()*GRID_W,
+    y: fromForge ? bp.y : (anywhere ? Math.random()*GRID_H : GRID_H + 5),
+    vx: (Math.random()-0.5) * 6, vy: -(ember ? 10 + Math.random()*18 : 2 + Math.random()*5),
+    r: ember ? 0.8 + Math.random()*1.2 : 0.6 + Math.random()*1.1,
+    ph: Math.random()*6.28, life: ember ? 3 + Math.random()*5 : 99
+  };
+}
+
+function atmoShake(amount){
+  if (REDUCED_MOTION) return;
+  Atmo.shake = Math.min(10, Math.max(Atmo.shake, amount));
+}
+
+/* Vor render(): Zeitschritt, Kamera-Offset, Hintergrund */
+function atmoBegin(){
+  const now = performance.now() / 1000;
+  const dt = Atmo.lastT ? Math.min(0.05, now - Atmo.lastT) : 0.016;
+  Atmo.lastT = now; Atmo.time += dt;
+  const key = state.mapKey + '|' + state.blockedCells.size;
+  if (Atmo.bgKey !== key) buildAtmoBackground();
+
+  for (let i = 0; i < Atmo.motes.length; i++){
+    const m = Atmo.motes[i];
+    m.x += (m.vx + Math.sin(Atmo.time*0.7 + m.ph) * 4) * dt;
+    m.y += m.vy * dt;
+    m.life -= dt;
+    if (m.y < -5 || m.life <= 0 || m.x < -5 || m.x > GRID_W + 5) Atmo.motes[i] = newMote(false);
+  }
+
+  ctx.save();
+  if (Atmo.shake > 0.05){
+    ctx.translate((Math.random()-0.5)*Atmo.shake, (Math.random()-0.5)*Atmo.shake);
+    Atmo.shake *= Math.pow(0.02, dt);
+  }
+  ctx.drawImage(Atmo.bg, 0, 0, GRID_W, GRID_H);
+
+  // glimmende Kohleadern
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const v of Atmo.veins){
+    const a = 0.25 + 0.35 * (0.5 + 0.5*Math.sin(Atmo.time * v.sp + v.ph));
+    ctx.fillStyle = 'rgba(232,116,42,' + a.toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(v.x, v.y, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(232,116,42,' + (a*0.18).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(v.x, v.y, 5, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+  drawAtmoForge();
+}
+
+function drawAtmoForge(){
+  const bp = state.waypoints[state.waypoints.length - 1];
+  const fl = 0.75 + 0.25*Math.sin(Atmo.time*9) * Math.sin(Atmo.time*3.3 + 1);
+  ctx.save();
+  ctx.fillStyle = 'rgba(240,' + (120 + fl*60|0) + ',40,' + (0.75*fl + 0.2).toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(bp.x, bp.y + 10, 6*fl + 1, Math.PI, 0); ctx.lineTo(bp.x + 7, bp.y + 16); ctx.lineTo(bp.x - 7, bp.y + 16); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/* Nach der Spielwelt, vor Schwebetexten: Licht, Luftpartikel, Vignette */
+function atmoLighting(){
+  const L = Atmo.lctx, t = Atmo.time;
+  L.globalCompositeOperation = 'source-over';
+  L.clearRect(0, 0, GRID_W, GRID_H);
+  L.fillStyle = 'rgba(6,4,3,' + Atmo.darkness + ')';
+  L.fillRect(0, 0, GRID_W, GRID_H);
+  L.globalCompositeOperation = 'destination-out';
+  const hole = (x, y, r, s) => {
+    const g = L.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,' + s + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    L.fillStyle = g; L.beginPath(); L.arc(x, y, r, 0, Math.PI*2); L.fill();
+  };
+  const wp = state.waypoints, bp = wp[wp.length - 1], sp = wp[0];
+  hole(bp.x, bp.y, 130 + Math.sin(t*7)*4, 1);
+  hole(sp.x, sp.y, 70, 0.8);
+  for (const tw of state.towers){
+    const flick = tw.type === 'ofen' ? 12*Math.sin(t*8 + tw.id) : 3*Math.sin(t*2 + tw.id);
+    hole(tw.x, tw.y, (tw.type === 'ofen' ? 105 : 80) + flick, 1);
+  }
+  for (const e of state.enemies) if (e.hp > 0) hole(e.x, e.y, 34, 0.7);
+  for (const imp of state.imps) hole(imp.x, imp.y, 40, 0.8);
+  for (const p of state.projectiles) hole(p.x, p.y, 26, 0.6);
+  for (const p of state.particles) if (p.type === 'blast') hole(p.x, p.y, p.radius * 1.4, 1);
+  if (state.hoverCell && (state.selectedBuildType || state.bombArmed)){
+    const hc = cellCenter(state.hoverCell.col, state.hoverCell.row);
+    hole(hc.x, hc.y, 110, 0.9);
+  }
+  if (state.selectedTowerId){
+    const st = state.towers.find(x => x.id === state.selectedTowerId);
+    if (st) hole(st.x, st.y, 150, 0.9);
+  }
+  ctx.drawImage(Atmo.light, 0, 0, GRID_W, GRID_H);
+
+  // warmes Zusatzlicht (additiv) um Ofen-Tuerme und Schmiede
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const glow = (x, y, r, a) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(232,116,42,' + a + ')'); g.addColorStop(1, 'rgba(232,116,42,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  };
+  glow(bp.x, bp.y + 6, 70, (0.20 + 0.05*Math.sin(t*9)).toFixed(3));
+  for (const tw of state.towers) if (tw.type === 'ofen') glow(tw.x, tw.y, 55, (0.12 + 0.04*Math.sin(t*8 + tw.id)).toFixed(3));
+  for (const p of state.particles) if (p.type === 'blast') glow(p.x, p.y, p.radius, (0.35 * p.life / p.maxLife).toFixed(3));
+
+  // Staub (kalt) und Glutfunken (warm) in der Luft
+  for (const m of Atmo.motes){
+    if (m.ember){
+      const a = Math.min(1, m.life / 1.5) * (0.5 + 0.5*Math.sin(t*6 + m.ph));
+      ctx.fillStyle = 'rgba(240,160,60,' + a.toFixed(3) + ')';
+    } else {
+      ctx.fillStyle = 'rgba(210,190,160,' + (0.08 + 0.06*Math.sin(t + m.ph)).toFixed(3) + ')';
+    }
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+  ctx.drawImage(Atmo.vignette, 0, 0, GRID_W, GRID_H);
+}
+
+function atmoEnd(){ ctx.restore(); }
+
+function drawGroundShadow(x, y, rx, ry){
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); ctx.fill();
+}
+
+
+/* Aufsteigende Glutfunken im Seitenhintergrund (Branch redesign). Leicht: 45 Punkte,
+   bei prefers-reduced-motion aus. */
+const MenuFx = { cv:null, c:null, pts:[], w:0, h:0, last:0 };
+function drawMenuFx(){
+  if (REDUCED_MOTION) return;
+  if (!MenuFx.cv){
+    MenuFx.cv = document.getElementById('menuFx'); if (!MenuFx.cv) return;
+    MenuFx.c = MenuFx.cv.getContext('2d');
+  }
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w !== MenuFx.w || h !== MenuFx.h){ MenuFx.cv.width = w; MenuFx.cv.height = h; MenuFx.w = w; MenuFx.h = h; }
+  const now = performance.now()/1000, dt = MenuFx.last ? Math.min(0.05, now - MenuFx.last) : 0.016; MenuFx.last = now;
+  const target = state.screen === 'start' ? 45 : 18;
+  while (MenuFx.pts.length < target) MenuFx.pts.push({ x:Math.random()*w, y:h + Math.random()*h*0.5, vy:15+Math.random()*35, ph:Math.random()*6.28, r:0.8+Math.random()*1.8 });
+  if (MenuFx.pts.length > target) MenuFx.pts.length = target;
+  const c = MenuFx.c; c.clearRect(0,0,w,h);
+  for (const p of MenuFx.pts){
+    p.y -= p.vy*dt; p.x += Math.sin(now*0.8 + p.ph)*12*dt;
+    if (p.y < -10){ p.y = h + 10; p.x = Math.random()*w; }
+    const a = Math.min(1, p.y/h) * (0.35 + 0.35*Math.sin(now*5 + p.ph));
+    c.fillStyle = 'rgba(240,150,50,'+Math.max(0,a).toFixed(3)+')';
+    c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI*2); c.fill();
+  }
+}
+function render(){
+  ctx.clearRect(0,0,GRID_W,GRID_H);
+  /* Detail-Hintergrund, Kohleadern, Stolleneingang und Schmiedeofen kommen aus dem
+     Atmo-Modul (Branch redesign) statt aus dem flachen Zellraster + Emoji. */
+  atmoBegin();
   // dezentes Grid für Baubereich
-  ctx.strokeStyle = 'rgba(232,116,42,0.06)';
+  ctx.strokeStyle = 'rgba(232,116,42,0.05)'; ctx.lineWidth = 1;
   for (let col=0; col<=COLS; col++){ ctx.beginPath(); ctx.moveTo(col*CELL,0); ctx.lineTo(col*CELL,GRID_H); ctx.stroke(); }
   for (let row=0; row<=ROWS; row++){ ctx.beginPath(); ctx.moveTo(0,row*CELL); ctx.lineTo(GRID_W,row*CELL); ctx.stroke(); }
-
-  // Start/Ziel
-  const spawnP = state.waypoints[0], baseP = state.waypoints[state.waypoints.length-1];
-  ctx.font = '26px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle='rgba(79,179,169,0.25)'; ctx.beginPath(); ctx.arc(spawnP.x,spawnP.y,22,0,Math.PI*2); ctx.fill();
-  ctx.fillText('🕳️', spawnP.x, spawnP.y);
-  ctx.fillStyle='rgba(240,180,41,0.25)'; ctx.beginPath(); ctx.arc(baseP.x,baseP.y,22,0,Math.PI*2); ctx.fill();
-  ctx.fillText('🏰', baseP.x, baseP.y);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
 
   // Bomben-Zielvorschau (Wirkradius am Mauszeiger)
   if (state.bombArmed && state.hoverCell){
@@ -2656,6 +3184,7 @@ function render(){
        Paragon (Umbau 073026, per Fusion) bekommt einen noch helleren, cyanfarbenen
        Sockel - klar ueber Stufe 4 hinausgehend, statt nur eine weitere Farbvariante.
        Der Turm-Emoji bleibt in beiden Faellen, damit der Typ weiter erkennbar ist. */
+    drawGroundShadow(tw.x, tw.y + 15, 19, 6);
     const isElite = tw.level === LEVEL4_INDEX;
     const isParagon = tw.level === PARAGON_LEVEL_INDEX;
     if (isParagon){
@@ -2730,6 +3259,7 @@ function render(){
     ctx.beginPath(); ctx.ellipse(packX+packW*0.3, packY+packH*0.4, packW*0.14, packH*0.1, 0, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(packX+packW*0.68, packY+packH*0.6, packW*0.12, packH*0.09, 0, 0, Math.PI*2); ctx.fill();
     // Figur
+    drawGroundShadow(e.x, e.y + 13, vis.hitR * 0.8, 4);
     drawEnemyFigure(ctx, e, bob);
     if (e.hitFlash>0){
       ctx.globalAlpha = e.hitFlash/0.12*0.5;
@@ -2807,6 +3337,8 @@ function render(){
     }
   }
 
+  atmoLighting();
+
   // Schwebetexte
   ctx.font='bold 14px "Space Mono", monospace';
   for (const f of state.floatTexts){
@@ -2815,6 +3347,7 @@ function render(){
     ctx.fillText(f.text, f.x, f.y);
     ctx.globalAlpha = 1;
   }
+  atmoEnd();
 }
 
 /* =========================================================
@@ -3060,6 +3593,7 @@ function detonateBomb(x, y){
   }
   spawnFloatText(x, y-30, '💣 '+BOMB_DAMAGE+' Schaden', '#E8742A');
   Sound.bomb();
+  atmoShake(7);
   updateTopbarUI();
   return true;
 }
@@ -3340,6 +3874,9 @@ function boot(){
     updateSoundBtnUI();
     wireEvents();
     showScreen('start');
+    /* Browser erlauben Audio erst nach einer Nutzeraktion - die Menue-Musik startet
+       deshalb beim ersten Klick/Tipp irgendwo auf der Seite (Branch redesign). */
+    document.addEventListener('pointerdown', () => { Sound.unlock(); Sound.startMusic(); }, { once:true });
     requestAnimationFrame(mainLoop);
   } catch (e) {
     console.error('Start fehlgeschlagen:', e);
