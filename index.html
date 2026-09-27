@@ -34,6 +34,11 @@
   }
   *,*::before,*::after{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;}
+  /* Scrollbar-Platz dauerhaft reservieren. Ohne das loeste das Aufklappen des
+     #selectionPanel (Turm anklicken) einen vertikalen Scrollbalken aus, die
+     Viewport-Breite fiel um ~15 px und die zentrierte Canvas rutschte 7,5 px
+     zur Seite - beim Abwaehlen zurueck (Playtest-Befund 11.6). */
+  html{ scrollbar-gutter:stable; overflow-y:scroll; }
   body{
     background:radial-gradient(ellipse at 50% -10%, #2b2018 0%, var(--coal-black) 60%);
     color:var(--parchment);
@@ -120,6 +125,7 @@
   .diff-Leicht{background:rgba(79,179,169,0.18); color:var(--frost-teal);}
   .diff-Mittel{background:rgba(240,180,41,0.18); color:var(--molten-gold);}
   .diff-Schwer{background:rgba(193,68,14,0.2); color:#FF8A5C;}
+  .diff-Tutorial{background:rgba(79,179,169,0.28); color:var(--frost-teal); border:1px solid var(--frost-teal);}
   .map-card-play{align-self:flex-start;}
   .map-card-hs-badge{
     position:absolute; top:8px; right:8px; background:rgba(20,17,15,0.85);
@@ -426,6 +432,7 @@
     <p class="start-sub">Verteidige den Stollen. Sammle Kohle, schmiede deine Verteidigung, halt die Glut am Brennen.</p>
 
     <div class="start-menu">
+      <button class="btn start-menu-btn" id="openTutorialBtn" style="border-color:var(--frost-teal); color:var(--frost-teal);">🎓 Tutorial spielen <span style="opacity:0.75; font-weight:400;">– empfohlen für Einsteiger</span></button>
       <button class="btn btn-primary start-menu-btn" id="openMapSelectBtn">🗺️ Karte wählen</button>
       <button class="btn start-menu-btn" id="openLeaderboardBtn">🏆 Bestenlisten</button>
       <button class="btn start-menu-btn" id="startSettingsBtn">⚙️ Einstellungen</button>
@@ -558,6 +565,18 @@
   </div>
 </div>
 
+<!-- Tutorial-Hinweis Modal (Feedback 30): gleiche Optik wie #endlessInfoModal, aber generisch -
+     Titel/Text kommen zur Laufzeit aus TUTORIAL_HINTS, siehe showTutorialHint(). -->
+<div class="modal-overlay" id="tutorialHintModal">
+  <div class="modal-card" style="border-color:var(--frost-teal);">
+    <h2 class="modal-title" id="tutorialHintTitle" style="color:var(--frost-teal);">🎓 Hinweis</h2>
+    <p class="modal-sub" id="tutorialHintText" style="margin-bottom:16px;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="tutorialHintOkBtn">Verstanden</button>
+    </div>
+  </div>
+</div>
+
 <!-- Endlos-Erklaerung Modal -->
 <div class="modal-overlay" id="endlessInfoModal">
   <div class="modal-card">
@@ -610,6 +629,7 @@ const WAVE_AUTOSTART_SECONDS = 15;
    ========================================================= */
 /* Formspree-Formular "GLUTFRONT Feedback", eingerichtet von Darius mit d.holzknecht@icloud.com. */
 const FEEDBACK_ENDPOINT = "https://formspree.io/f/mwvgyglj";
+const TUTORIAL_MAP_KEY = 'tutorial'; // Schluessel der Tutorial-Karte in MAPS, siehe Feedback 30
 
 /* Schwierigkeitsgrad koppelt Kartengeometrie UND Wellen-Formel (siehe
    Spieleentwicklung/GLUTFRONT-Konzept.md, Abschnitt 6). "Mittel" ist die
@@ -633,7 +653,15 @@ const FEEDBACK_ENDPOINT = "https://formspree.io/f/mwvgyglj";
 const DIFFICULTY_TIERS = {
   leicht: { label:'Leicht', hpScalePerWave:0.09, rewardScalePerWave:0.08, bossInterval:6, livesMult:1.3, kohleMult:1.2 },
   mittel: { label:'Mittel', hpScalePerWave:0.12, rewardScalePerWave:0.06, bossInterval:5, livesMult:1.0, kohleMult:1.0 },
-  schwer: { label:'Schwer', hpScalePerWave:0.15, rewardScalePerWave:0.05, bossInterval:5, livesMult:0.85, kohleMult:0.9 }
+  schwer: { label:'Schwer', hpScalePerWave:0.15, rewardScalePerWave:0.05, bossInterval:5, livesMult:0.85, kohleMult:0.9 },
+  /* Tutorial (Feedback 30): eigener Tier statt Wiederverwendung von "leicht" - die
+     hpScale/rewardScale-Werte hier werden NICHT von generateWave() gelesen (die Karte hat
+     eine eigene generateTutorialWave(), siehe dort), nur kohleMult/livesMult wirken noch
+     ueber resetRunState(). Bewusst grosszuegig: die Tutorial-Karte muss in wenigen, kurzen
+     Wellen genug Kohle abwerfen, um tatsaechlich bis zur Paragon-Fusion (3x Stufe-4 desselben
+     Typs + hohe Fusionskosten) und zu mehrfachem Bombeneinsatz zu kommen - siehe
+     generateTutorialWave()/checkWaveCompletion() fuer die zugehoerige Wellen-Bonus-Logik. */
+  tutorial: { label:'Tutorial', hpScalePerWave:0, rewardScalePerWave:0, bossInterval:999, livesMult:2.5, kohleMult:6 }
 };
 
 /* 9 Karten, 3 je Schwierigkeitsgrad. Nur waagrechte/senkrechte Wegstuecke
@@ -656,7 +684,16 @@ const DIFFICULTY_TIERS = {
    Ausnahme Glutschlucht: 6 der 58 Wegzellen sind mit Reichweite 120 von keiner
    bebaubaren Zelle aus erreichbar (zu abgelegen zwischen den Sperrfeldern) - die
    Pflichtdeckung 8 deckt dort bewusst nicht 100%, das ist eine Karteneigenheit. */
+/* Tutorial-Karte (Feedback 30): bewusst NICHT eine der 9 obigen Karten wiederverwendet -
+   eigene, neue Wegpunkt-Liste, eigener Tier 'tutorial' (siehe DIFFICULTY_TIERS), eigene
+   Wellen-Logik (generateTutorialWave() statt generateWave(), siehe dort). Die 9 bestehenden
+   Karten oben bleiben unveraendert. Langer erster Vertikal-Abschnitt ([2,1]-[2,7]) gibt
+   von Anfang an einen guten, langen Deckungs-Abschnitt fuer die ersten 1-2 Tuerme; maxTowers
+   16 ist bewusst grosszuegig (nicht nach der "Pflichtdeckung + 3"-Formel der 9 Karten
+   bemessen), damit genug Bauplaetze fuer 3 gleichtypige Stufe-4-Tuerme (Paragon-Fusion)
+   PLUS mehrere andere Turmtypen (zum Zeigen von dmgType-Vielfalt) gleichzeitig stehen. */
 const MAPS = {
+  tutorial:     { name:'Schmiedeschule', tier:'tutorial', maxTowers:16, points:[[0,1],[2,1],[2,7],[7,7],[7,2],[9,2],[9,6],[13,6],[13,1],[15,1]], blocked:[] },
   tal:          { name:'Talpfad',       tier:'leicht', maxTowers:9,  points:[[0,4],[5,4],[5,6],[9,6],[9,3],[6,3],[6,1],[12,1],[12,5],[15,5]], blocked:[] },
   schachtweg:   { name:'Schachtweg',    tier:'leicht', maxTowers:8,  points:[[0,3],[4,3],[4,6],[8,6],[8,4],[6,4],[6,2],[11,2],[11,6],[15,6]], blocked:[] },
   senkgrube:    { name:'Senkgrube',     tier:'leicht', maxTowers:7,  points:[[0,7],[4,7],[4,1],[10,1],[10,5],[15,5]], blocked:[] },
@@ -752,6 +789,49 @@ function generateWave(n, tierCfg){
     if (n>=TOTAL_WAVES+15) add('gepanzert', 2 + Math.floor((n-(TOTAL_WAVES+15))/10), 1000);
   }
   return { wave:n, isBoss, hpScale, bossHpExtra, rewardScale, enemies:list };
+}
+
+/* =========================================================
+   TUTORIAL-KARTE: EIGENE WELLEN-/KOHLE-LOGIK (Feedback 30)
+   ========================================================= */
+/* generateWave()/TOTAL_WAVES sind auf 20 Wellen fuer die 9 Balance-Karten ausgelegt - fuer
+   eine kurze, geführte Tutorial-Karte ungeeignet: um dort binnen weniger Wellen tatsaechlich
+   bis zur Paragon-Fusion (3 gleichtypige Stufe-4-Tuerme + hohe Fusionskosten, siehe
+   PARAGON_FUSION_COUNT/paragonFusionCost) UND zu mehrfachem, sinnvollem Bombeneinsatz zu
+   kommen, braucht es eine eigene, kurze Wellenliste MIT eigener, deutlich grosszuegigerer
+   Kohle-Kurve statt der linearen generateWave()-Formel. Entscheidung (statt z.B. Bombe/Fusion
+   kuenstlich zu verbilligen): die bestehende Balance/Kosten unangetastet lassen und stattdessen
+   den Kohle-ZUFLUSS dieser einen Karte stark erhoehen (kohleMult 6 in DIFFICULTY_TIERS.tutorial,
+   TUTORIAL_REWARD_SCALE hier, grosszuegiger Wellen-Bonus in checkWaveCompletion) - so bleiben
+   alle Zahlen, die der Spieler auf den echten Karten kennenlernt, exakt gleich, nur das Tempo,
+   in dem man auf der Tutorial-Karte an sie herankommt, ist bewusst stark beschleunigt. */
+const TUTORIAL_TOTAL_WAVES = 9;
+const TUTORIAL_REWARD_SCALE = 5; // 5x Basis-Kohlelohn pro Kill, konstant (keine Wellen-Progression noetig - die Karte ist kurz)
+function generateTutorialWave(n){
+  const isBoss = (n === TUTORIAL_TOTAL_WAVES);
+  const hpScale = 1 + (n-1)*0.06; // sehr sanft - die Karte soll lehren, nicht haerten
+  const list = [];
+  const add = (type,count,stagger) => { for(let i=0;i<count;i++) list.push({type, delay:i*stagger}); };
+  switch(n){
+    case 1: add('slime',5,600); break;                                              // Grundtuerme kennenlernen
+    case 2: add('slime',4,550); add('goblin',3,700); break;                         // erste Kohle, erstes Upgrade
+    case 3: add('bat',6,400); add('slime',3,550); break;                            // schnelle Gegner, Frostturm sinnvoll
+    case 4: add('salamander',2,900); add('slime',4,550); break;                     // erster feuerresistenter Gegner
+    case 5: add('gepanzert',2,1000); add('goblin',4,700); break;                    // erster physisch-resistenter Gegner
+    case 6: add('goblin',6,650); add('ogre',2,1300); break;                         // Kohle-Polster fuer Stufe 4
+    case 7: add('ogre',3,1200); add('salamander',2,900); add('gepanzert',2,1000); break; // Mischbestand gefordert
+    case 8: add('goblin',8,500); add('bat',5,400); add('ogre',2,1200); break;        // groessere Gruppe -> Bombe lohnt sich
+    case 9: add('boss',1,0); add('goblin',5,700); break;                             // Abschluss-Bosswelle
+  }
+  return { wave:n, isBoss, hpScale, bossHpExtra:1, rewardScale:TUTORIAL_REWARD_SCALE, enemies:list };
+}
+/* Liefert die fuer die aktuelle Karte gueltige Wellen-Gesamtzahl - fuer alle 9 Balance-Karten
+   unveraendert TOTAL_WAVES (20), nur die Tutorial-Karte hat mit TUTORIAL_TOTAL_WAVES (9) einen
+   eigenen, kuerzeren Wert. Zentral an einer Stelle statt an jeder Vergleichsstelle den
+   Kartenschluessel abzufragen (beginWave/updateWaveCountdown/checkWaveCompletion/triggerVictory/
+   wireEvents-Startknopf). */
+function mapTotalWaves(mapKey){
+  return mapKey === TUTORIAL_MAP_KEY ? TUTORIAL_TOTAL_WAVES : TOTAL_WAVES;
 }
 
 /* Stufe 4 (Index 3) neu seit Umbau 072826: Der Playtest zeigte 6947-7214 Kohle
@@ -1084,6 +1164,7 @@ const state = {
   imps: [],
   particles: [],
   floatTexts: [],
+  kohleHudTarget: { x: 0, y: -10 }, // Zielpunkt fuer die Kohle-Einsammel-Animation (resizeCanvas() haelt ihn aktuell)
 
   spawnQueue: [],
 
@@ -1098,6 +1179,9 @@ const state = {
   speedMultiplier: 1,
   controlMode: 'auto',       // 'auto' | 'mouse' | 'touch'
   effectiveTouch: false,
+
+  tutorialSeen: new Set(),   // IDs bereits gezeigter Tutorial-Hinweise (Feedback 30), pro Run in resetRunState() geleert
+  tutorialQueue: [],         // wartende Tutorial-Hinweise, hoechstens einer gleichzeitig sichtbar
 
   nextEntityId: 1
 };
@@ -1129,6 +1213,10 @@ function resetRunState(){
   state.bombCooldownUntil = 0;
   state.paused = false;
   state.speedMultiplier = 1;
+  /* Tutorial-Fuehrung (Feedback 30): pro Run zuruecksetzen, damit jeder neue Versuch der
+     Tutorial-Karte wieder alle Hinweise von vorne zeigt (z.B. nach "Nochmal versuchen"). */
+  state.tutorialSeen = new Set();
+  state.tutorialQueue = [];
 }
 
 /* =========================================================
@@ -1203,7 +1291,13 @@ const dom = {
   backToMapsBtn: $('backToMapsBtn'),
   continueEndlessBtn: $('continueEndlessBtn'),
   endlessInfoModal: $('endlessInfoModal'),
-  endlessInfoOkBtn: $('endlessInfoOkBtn')
+  endlessInfoOkBtn: $('endlessInfoOkBtn'),
+
+  openTutorialBtn: $('openTutorialBtn'),
+  tutorialHintModal: $('tutorialHintModal'),
+  tutorialHintTitle: $('tutorialHintTitle'),
+  tutorialHintText: $('tutorialHintText'),
+  tutorialHintOkBtn: $('tutorialHintOkBtn')
 };
 const ctx = dom.canvas.getContext('2d');
 
@@ -1244,6 +1338,17 @@ function resizeCanvas(){
     dom.canvas.height = Math.round(h * dpr);
     const scale = (w / GRID_W) * dpr;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    /* Zielpunkt der Kohle-Anzeige in logischen Canvas-Koordinaten cachen, statt bei jedem
+       Gegner-Tod erneut getBoundingClientRect() aufzurufen - bei einem Bomben-/AoE-Kill mit
+       vielen gleichzeitigen Toden waeren das sonst viele erzwungene Reflows pro Frame
+       (Performance-Vorgabe fuer die Kohle-Einsammel-Animation, Darius-Auftrag 082826). */
+    if (dom.kohlePill && dom.canvas){
+      const pillRect = dom.kohlePill.getBoundingClientRect();
+      state.kohleHudTarget = clientToLogical(
+        pillRect.left + pillRect.width / 2,
+        pillRect.top + pillRect.height / 2
+      );
+    }
   } catch (e) {
     console.error('resizeCanvas fehlgeschlagen:', e);
   }
@@ -1296,7 +1401,7 @@ function drawMiniMapPreview(canvas, mapDef){
   }
 }
 
-const TIER_ORDER = ['leicht', 'mittel', 'schwer'];
+const TIER_ORDER = ['tutorial', 'leicht', 'mittel', 'schwer']; // 'tutorial' zuerst - Feedback 30, soll als erstes/empfohlenes angeboten werden
 
 /* Baut die Kartenauswahl neu auf - wird bei jedem Oeffnen des Modals erneut
    aufgerufen (nicht nur einmal beim Boot), damit "bereits gespielt"-Badges
@@ -1483,10 +1588,16 @@ function mainLoop(ts){
       updateProjectiles(stepped);
       updateImps(stepped);
       updateParticles(stepped);
-      checkWaveCompletion();
+      /* checkGameOver() MUSS vor checkWaveCompletion() laufen: leakt in diesem Tick
+         der letzte Gegner der Welle UND fallen die Leben dabei auf/unter 0, wuerde
+         checkWaveCompletion() sonst faelschlich einen Sieg/eine naechste Welle ausloesen,
+         bevor die Niederlage erkannt wird (Feedback 27/Task Board, reproduzierter Bug:
+         "Sieg!" bei Welle 20 trotz 0 bzw. sogar negativer Leben). */
       checkGameOver();
+      checkWaveCompletion();
       updateTopbarUI();
       refreshSelectionAffordability();
+      checkTutorialHints();
     }
     if (state.screen === 'game'){
       render();
@@ -1503,7 +1614,9 @@ function mainLoop(ts){
 function beginWave(){
   state.waveNumber++;
   const tierCfg = DIFFICULTY_TIERS[MAPS[state.mapKey].tier];
-  const wave = generateWave(state.waveNumber, tierCfg);
+  /* Tutorial-Karte nutzt ihre eigene, kurze Wellenliste statt der 20-Wellen-Formel
+     (siehe generateTutorialWave()/Feedback 30) - alle 9 Balance-Karten unveraendert. */
+  const wave = (state.mapKey === TUTORIAL_MAP_KEY) ? generateTutorialWave(state.waveNumber) : generateWave(state.waveNumber, tierCfg);
   state.currentWaveData = wave;
   state.spawnQueue = wave.enemies.map(e => ({ type: e.type, tSpawn: e.delay/1000 }));
   state.waveTimer = 0;
@@ -1525,7 +1638,7 @@ function showWaveBanner(wave){
 
 function updateWaveCountdown(dt){
   if (state.waveActive || state.gameEnded) return;
-  if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode) return;
+  if (state.waveNumber >= mapTotalWaves(state.mapKey) && !state.endlessMode) return;
   state.waveCountdown -= dt;
   if (state.waveCountdown <= 0){
     beginWave();
@@ -1557,19 +1670,22 @@ function spawnEnemy(type){
     speed: base.speed, reward: Math.round(base.reward * wave.rewardScale),
     livesCost: base.livesCost,
     wpIndex: 0, x: start.x, y: start.y, progress: 0,
-    slowUntil: 0, slowPct: 0, hitFlash: 0, angle: 0
+    slowUntil: 0, slowPct: 0, hitFlash: 0, resistFlash: 0, lastResistText: -9, angle: 0
   });
 }
 
 function checkWaveCompletion(){
+  if (state.gameEnded) return; // Niederlage hat Vorrang - siehe Kommentar in mainLoop()
   if (!state.waveActive) return;
   if (state.spawnQueue.length === 0 && state.enemies.length === 0){
     state.waveActive = false;
-    const bonus = 15 + state.waveNumber*2;
+    /* Tutorial-Karte: deutlich groesserer Wellen-Bonus (Feedback 30) - Teil der bewusst
+       grosszuegigen Kohle-Kurve dieser einen Karte, siehe Kommentar bei generateTutorialWave(). */
+    const bonus = (state.mapKey === TUTORIAL_MAP_KEY) ? (200 + state.waveNumber*60) : (15 + state.waveNumber*2);
     state.kohle += bonus;
     state.totalKohleEarned += bonus;
     spawnFloatText(GRID_W/2, 34, 'Welle geschafft! +'+bonus+' 🪨', '#4FB3A9');
-    if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode){
+    if (state.waveNumber >= mapTotalWaves(state.mapKey) && !state.endlessMode){
       triggerVictory();
     } else {
       state.waveCountdown = WAVE_AUTOSTART_SECONDS;
@@ -1703,6 +1819,13 @@ function fillGameOverStats(){
 }
 function triggerDefeat(){
   state.gameEnded = true; state.waveActive = false;
+  /* Wellenleiste ausblenden: sonst steht hinter dem Niederlage-Modal weiter ein
+     eingefrorener "Welle starten (Ns)"-Button, obwohl die Runde vorbei ist
+     (Playtest-Befund 7). Der Countdown-Wert selbst lief schon seit dem
+     gameEnded-Guard in updateWaveCountdown() nicht mehr weiter - hier geht es
+     nur um die irrefuehrende Anzeige. .hidden = visibility:hidden, kein
+     Layout-Sprung. */
+  dom.waveBar.classList.add('hidden');
   Sound.lose();
   dom.gameOverTitle.textContent = 'Niederlage';
   dom.gameOverSub.textContent = state.endlessMode
@@ -1718,11 +1841,16 @@ function triggerDefeat(){
 function triggerVictory(){
   state.gameEnded = true; state.waveActive = false;
   Sound.win();
-  dom.gameOverTitle.textContent = 'Sieg!';
-  dom.gameOverSub.textContent = 'Alle '+TOTAL_WAVES+' Wellen überstanden – die Front hält.';
+  const isTutorial = state.mapKey === TUTORIAL_MAP_KEY;
+  dom.gameOverTitle.textContent = isTutorial ? 'Tutorial geschafft!' : 'Sieg!';
+  dom.gameOverSub.textContent = isTutorial
+    ? 'Alle '+TUTORIAL_TOTAL_WAVES+' Übungswellen der Schmiedeschule überstanden – jetzt kennst du alle Grundlagen. Auf zu einer echten Karte!'
+    : 'Alle '+TOTAL_WAVES+' Wellen überstanden – die Front hält.';
   /* Sichtbar nur hier: das ist der einzige Moment, an dem "weiterspielen statt aufhoeren"
-     ueberhaupt eine sinnvolle Frage ist (siehe Endlos-Modus-Plan.md). */
-  dom.continueEndlessBtn.style.display = '';
+     ueberhaupt eine sinnvolle Frage ist (siehe Endlos-Modus-Plan.md). Auf der Tutorial-Karte
+     ergibt Endlos-Weiterspielen keinen Sinn (generateTutorialWave() kennt nur 9 Wellen, siehe
+     Feedback 30) - Knopf bleibt dort verborgen, "Kartenauswahl" fuehrt direkt zu den echten Karten. */
+  dom.continueEndlessBtn.style.display = isTutorial ? 'none' : '';
   fillGameOverStats();
   dom.gameOverModal.classList.add('show');
 }
@@ -1748,6 +1876,105 @@ function confirmEndlessInfo(){
 }
 
 /* =========================================================
+   TUTORIAL-FÜHRUNG (Feedback 30)
+   ========================================================= */
+/* Generischer Mechanismus statt Spezialcode pro Hinweis: eine deklarative Liste aus
+   {id, title, text, cond(state)}. checkTutorialHints() prueft pro Frame (nur auf der
+   Tutorial-Karte, siehe mainLoop()) fuer jeden noch nicht gezeigten Hinweis, ob seine
+   Bedingung JETZT ZUM ERSTEN MAL erfuellt ist - genau dann kommt er in die Warteschlange
+   und wird als naechstes angezeigt (hoechstens einer gleichzeitig). So bleibt jeder Hinweis
+   kontextuell an den Moment gekoppelt, in dem die Mechanik gerade relevant wird, statt als
+   Textblock am Anfang aufgezaehlt zu werden. Neue Hinweise = neuer Eintrag in dieser Liste,
+   kein neuer Aufrufort noetig. */
+const TUTORIAL_HINTS = [
+  { id:'welcome', title:'🎓 Willkommen in der Schmiedeschule!',
+    cond: s => s.waveNumber === 0 && !s.waveActive,
+    text:'Baue Türme entlang des Weges, um die Gegner zu stoppen, bevor sie den Stollen erreichen. '+
+      'Wähle unten eine Turmkarte (Klick oder Tasten 1–6) und klicke dann ein freies Feld neben dem '+
+      'Weg an. Jeder Turm kostet 🪨 Kohle – die verdienst du durch besiegte Gegner. Wenn du bereit '+
+      'bist, startest du die erste Welle unten mit „▶ Welle starten".' },
+  { id:'kohle', title:'🪨 Kohle verdient',
+    cond: s => s.totalKohleEarned >= 15,
+    text:'Besiegte Gegner lassen Kohle fallen (du siehst sie aus einem kleinen Rucksack fallen und '+
+      'zur Anzeige oben links fliegen). Damit kaufst du weitere Türme oder rüstest bestehende auf.' },
+  { id:'upgrade', title:'⬆ Türme aufrüsten',
+    cond: s => s.kohle >= 40 && s.towers.some(t => t.level === 0),
+    text:'Klicke einen platzierten Turm an – im Auswahlfeld siehst du seine Werte und einen '+
+      '„Upgrade"-Knopf. Jeder Turm lässt sich bis Stufe 4 aufrüsten: mehr Schaden, Reichweite und '+
+      'Feuerrate, aber steigende Kosten. Probier es an einem deiner Türme aus!' },
+  { id:'salamander', title:'🦎 Salamander – feuerresistent!',
+    cond: s => s.enemies.some(e => e.type === 'salamander'),
+    text:'Dieser Gegner ignoriert Feuerschaden komplett – dein Ofen 🔥 richtet gegen ihn nichts aus. '+
+      'Frost ❄️ trifft ihn sogar besonders hart (Schwäche). Ab jetzt lohnt sich ein Mix aus '+
+      'Turmtypen statt einer einzigen Sorte.' },
+  { id:'gepanzert', title:'🛡️ Gepanzerter – physisch resistent!',
+    cond: s => s.enemies.some(e => e.type === 'gepanzert'),
+    text:'Dieser Gegner mindert physischen Schaden (Schleuderer, Kanone, Scharfschütze) deutlich. '+
+      'Der Magier 🧙 (arkaner Schaden) trifft ihn dagegen ungemindert – auch hier gilt: Mischbestand '+
+      'statt Monokultur.' },
+  { id:'level4', title:'👑 Stufe 4 erreicht',
+    cond: s => s.towers.some(t => t.level === LEVEL4_INDEX),
+    text:'Dieser Turm steht jetzt auf der Höchststufe des normalen Upgrade-Pfads. Baue zwei weitere '+
+      'Türme DESSELBEN Typs ebenfalls auf Stufe 4 – dann kannst du alle drei zu einem einzigen, viel '+
+      'stärkeren 💎 Paragon verschmelzen.' },
+  { id:'fusion', title:'💎 Paragon-Fusion bereit!',
+    cond: s => s.towers.some(t => canFuseParagon(t)),
+    text:'Du hast drei gleichtypige Stufe-4-Türme! Wähle einen davon an und klicke „Zu Paragon '+
+      'verschmelzen" – die beiden anderen werden dabei verbraucht (ihre Bauplätze werden wieder '+
+      'frei), der ausgewählte Turm wird zum deutlich stärkeren Paragon.' },
+  { id:'bombe', title:'💣 Die Bombe',
+    cond: s => s.kohle >= BOMB_COST && s.waveNumber >= 2,
+    text:'Oben in der Kopfzeile kannst du eine Flächenschaden-Bombe kaufen: Knopf klicken, dann ein '+
+      'Ziel auf der Karte anklicken. Stark gegen große, dichte Gruppen oder eine Bosswelle – aber '+
+      'begrenzt (max. '+BOMB_MAX_PER_GAME+' pro Spiel) und mit kurzer Abklingzeit.' },
+  { id:'boss', title:'🐉 Bosswelle!',
+    cond: s => !!(s.currentWaveData && s.currentWaveData.isBoss && s.waveActive),
+    text:'Ein Drache naht – viel Leben, hoher Kohle-Lohn. Konzentriere deinen stärksten Turm (oder '+
+      'deinen Paragon, falls schon verschmolzen) auf ihn, und zögere nicht, jetzt die Bombe '+
+      'einzusetzen, falls es eng wird.' }
+];
+let tutorialAutoPaused = false;
+function checkTutorialHints(){
+  if (state.mapKey !== TUTORIAL_MAP_KEY) return;
+  for (const hint of TUTORIAL_HINTS){
+    if (state.tutorialSeen.has(hint.id)) continue;
+    if (hint.cond(state)){
+      state.tutorialSeen.add(hint.id);
+      state.tutorialQueue.push(hint);
+    }
+  }
+  if (!dom.tutorialHintModal.classList.contains('show') && state.tutorialQueue.length){
+    showTutorialHint(state.tutorialQueue.shift());
+  }
+}
+function showTutorialHint(hint){
+  /* Gleiches Auto-Pause-Muster wie andere waehrend des Spiels oeffnende Modals (z.B. das
+     Feedback-Formular der Deploy-Variante): pausiert nur, wenn der Spieler nicht ohnehin
+     schon manuell pausiert hat, und nimmt die Pause beim Schliessen nur dann wieder zurueck. */
+  if (state.screen === 'game' && !state.gameEnded && !state.paused){
+    state.paused = true;
+    dom.pauseOverlay.classList.add('show');
+    dom.pauseBtn.textContent = '▶';
+    tutorialAutoPaused = true;
+  } else {
+    tutorialAutoPaused = false;
+  }
+  dom.tutorialHintTitle.textContent = hint.title;
+  dom.tutorialHintText.textContent = hint.text;
+  dom.tutorialHintModal.classList.add('show');
+}
+function closeTutorialHint(){
+  dom.tutorialHintModal.classList.remove('show');
+  if (tutorialAutoPaused){
+    state.paused = false;
+    dom.pauseOverlay.classList.remove('show');
+    dom.pauseBtn.textContent = '⏸';
+    tutorialAutoPaused = false;
+  }
+  if (state.tutorialQueue.length) showTutorialHint(state.tutorialQueue.shift());
+}
+
+/* =========================================================
    SCHADEN, TÜRME, PROJEKTILE, GLUTWICHTE
    ========================================================= */
 function applyDamageToEnemy(e, amount, source, dmgType){
@@ -1761,6 +1988,18 @@ function applyDamageToEnemy(e, amount, source, dmgType){
     if (res.immuneTo === dmgType) dealt = 0;
     else if (res.weakTo === dmgType) dealt = amount * (res.weakMult || 1.5);
     else if (res.resistTo === dmgType) dealt = amount * (1 - (res.resistPct || 0));
+    /* Sichtbar machen, warum ein Treffer wenig/nichts bewirkt - sonst muss der
+       Spieler es aus ausbleibendem Fortschritt erschliessen (Feedback 21.4).
+       Nur bei Minderung, nicht beim frost-Bonus gegen Salamander (dealt > amount). */
+    if (dealt < amount){
+      e.resistFlash = 0.25;
+      if (state.playTime - (e.lastResistText || -9) > 0.7){
+        e.lastResistText = state.playTime;
+        spawnFloatText(e.x, e.y - 16,
+          dealt === 0 ? 'immun' : '−' + Math.round((1 - dealt / amount) * 100) + '%',
+          '#8FD3E8');
+      }
+    }
   }
   e.hp -= dealt;
   if (dealt > 0) e.hitFlash = 0.12;
@@ -1812,6 +2051,7 @@ function updateEnemies(dt){
       }
     }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+    if (e.resistFlash > 0) e.resistFlash = Math.max(0, e.resistFlash - dt);
   }
 
   const last = state.waypoints[state.waypoints.length - 1];
@@ -1819,7 +2059,7 @@ function updateEnemies(dt){
   for (const e of state.enemies){
     if (e.hp <= 0) continue; // durch Schaden gestorben, bereits verarbeitet
     if (e.wpIndex >= state.waypoints.length - 1 && dist(e, last) < 1){
-      state.lives -= e.livesCost;
+      state.lives = Math.max(0, state.lives - e.livesCost); // nie unter 0 clampen (Feedback 27)
       spawnFloatText(e.x, e.y - 10, '−' + e.livesCost + ' ❤', '#FF6B4A');
       Sound.leak();
       continue;
@@ -1950,6 +2190,38 @@ function spawnKillEffect(e, paidAmount, isBomb){
     const ang = Math.random()*Math.PI*2, spd = 30+Math.random()*50;
     state.particles.push({ type:'ember', x:e.x, y:e.y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-40, life:0.6, maxLife:0.6 });
   }
+  spawnKohleDrop(e, paidAmount);
+}
+/* Sichtbare Kohle beim Tod (Darius-Auftrag 082826): statt dass der Lohn nur unsichtbar im
+   Zaehler hochspringt, "faellt" er als kleine Nuggets aus dem Rucksack (kurzer Bounce),
+   fliegt danach in einer sanften Kurve zur Kohle-Anzeige und verschwindet dort. Rein
+   kosmetisch - state.kohle wird weiterhin sofort in applyDamageToEnemy() gutgeschrieben,
+   diese Funktion haengt nichts an die Auszahlung, nur an die Anzeige davon.
+   Menge/Groesse grob proportional zu paidAmount, siehe MAX_COIN_PARTICLES fuer den
+   Performance-Deckel bei vielen gleichzeitigen Kills (Bombe/Ofen-AoE). Bomben-Kills zahlen
+   nur BOMB_REWARD_PCT (25%) Lohn - paidAmount kommt hier bereits reduziert an, es braucht
+   also keinen eigenen Bomben-Sonderfall, um "weniger/kleinere Kohle bei Bombenkills"
+   visuell konsistent zur reduzierten Auszahlung zu halten. Wird paidAmount irgendwann 0
+   (aktuell kommt das nicht vor), faellt konsequent auch keine Kohle sichtbar heraus. */
+const MAX_COIN_PARTICLES = 48;
+function spawnKohleDrop(e, paidAmount){
+  if (paidAmount <= 0) return;
+  let activeCoins = 0;
+  for (const p of state.particles) if (p.type === 'coin') activeCoins++;
+  if (activeCoins >= MAX_COIN_PARTICLES) return;
+  const count = Math.min(clamp(Math.round(1 + paidAmount/12), 1, 6), MAX_COIN_PARTICLES - activeCoins);
+  const size = clamp(2.5 + paidAmount/40, 2.5, 5.5);
+  const target = state.kohleHudTarget;
+  for (let i=0;i<count;i++){
+    const ang = Math.random()*Math.PI*2, spd = 40+Math.random()*40;
+    const burstDur = 0.16 + Math.random()*0.08;
+    const flyDur = 0.38 + Math.random()*0.14;
+    state.particles.push({
+      type:'coin', x:e.x, y:e.y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-30,
+      size, burstDur, flyDur, maxLife: burstDur+flyDur, life: burstDur+flyDur,
+      tx: target.x + (Math.random()-0.5)*6, ty: target.y + (Math.random()-0.5)*6
+    });
+  }
 }
 function spawnHitSpark(x,y,color){
   state.particles.push({ type:'spark', x, y, color: color || '#F0B429', life:0.12, maxLife:0.12 });
@@ -1957,6 +2229,20 @@ function spawnHitSpark(x,y,color){
 function updateParticles(dt){
   for (const p of state.particles){
     if (p.type === 'ember'){ p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 60*dt; }
+    else if (p.type === 'coin'){
+      const elapsed = p.maxLife - p.life;
+      if (elapsed < p.burstDur){
+        // Kurzer Fall-/Bounce-Ausstoss aus dem Rucksack, wie die "ember"-Todesfunken.
+        p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 260*dt;
+      } else {
+        // Einsammel-Flug: sanfte Kurve zur Kohle-Anzeige, mit leichtem Bogen nach oben.
+        if (!p._flying){ p._flying = true; p.fx = p.x; p.fy = p.y; }
+        const k = clamp((elapsed - p.burstDur) / p.flyDur, 0, 1);
+        const ke = k*k*(3-2*k); // smoothstep statt linear, wirkt weniger mechanisch
+        p.x = p.fx + (p.tx - p.fx) * ke;
+        p.y = p.fy + (p.ty - p.fy) * ke - Math.sin(k*Math.PI) * 16;
+      }
+    }
     p.life -= dt;
   }
   state.particles = state.particles.filter(p => p.life > 0);
@@ -2425,11 +2711,24 @@ function render(){
     const vis = ENEMY_VISUAL[e.type] || ENEMY_VISUAL.slime;
     const bob = Math.sin(state.playTime*6 + e.id) * 2;
     const facingLeft = Math.cos(e.angle||0) < 0;
-    // Kohle-Rucksack (auf der Rueckseite der Laufrichtung, hinter der Figur)
-    const packX = e.x + (facingLeft ? 8 : -8) - 6;
+    /* Kohle-Rucksack (auf der Rueckseite der Laufrichtung, hinter der Figur) - traegt die
+       Kohle sichtbar, statt dass der Lohn nur unsichtbar im Zaehler auftaucht (Darius-
+       Auftrag 082826). Groesse skaliert grob mit dem Lohn (e.reward, bereits welle-skaliert),
+       damit ein Oger/Boss auf den ersten Blick mehr traegt als ein Schleimling. Zwei
+       kleine helle Facetten im Sack sollen wie sichtbare Nuggets lesen, im selben
+       Vektor-Stil (kleine helle Ellipsen) wie die uebrigen Gegnerfiguren. */
+    const packSize = clamp(9 + Math.sqrt(e.reward || 1) * 0.9, 9, 20);
+    const packW = packSize, packH = packSize * 1.08;
+    const packX = e.x + (facingLeft ? 8 : -8) - packW/2;
+    const packY = e.y - 2 + bob;
     ctx.fillStyle='#6B4A2A';
-    roundRect(ctx, packX, e.y-2+bob, 12, 13, 3); ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; roundRect(ctx, packX, e.y-2+bob, 12, 13, 3); ctx.stroke();
+    roundRect(ctx, packX, packY, packW, packH, 3); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; roundRect(ctx, packX, packY, packW, packH, 3); ctx.stroke();
+    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(packX+packW*0.5, packY); ctx.lineTo(packX+packW*0.5, packY+packH); ctx.stroke();
+    ctx.fillStyle='#8A6B45';
+    ctx.beginPath(); ctx.ellipse(packX+packW*0.3, packY+packH*0.4, packW*0.14, packH*0.1, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(packX+packW*0.68, packY+packH*0.6, packW*0.12, packH*0.09, 0, 0, Math.PI*2); ctx.fill();
     // Figur
     drawEnemyFigure(ctx, e, bob);
     if (e.hitFlash>0){
@@ -2437,6 +2736,14 @@ function render(){
       ctx.fillStyle='#fff';
       ctx.beginPath(); ctx.arc(e.x,e.y+bob,vis.hitR,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=1;
+    }
+    if (e.resistFlash>0){
+      /* Cyan-Ring: der letzte Treffer wurde durch eine Resistenz gemindert oder
+         komplett geschluckt (Feedback 21.4). */
+      ctx.globalAlpha = clamp(e.resistFlash/0.25, 0, 1);
+      ctx.strokeStyle = '#8FD3E8'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y+bob, vis.hitR+3, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
     // HP-Leiste
     const bw=30, bh=4, ratio=clamp(e.hp/e.maxHp,0,1);
@@ -2470,6 +2777,20 @@ function render(){
       ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(p.x,p.y,6,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=1;
+    } else if (p.type==='coin'){
+      // Kleines Kohle-Nugget - Farbgebung am Rucksack orientiert (bewusst nicht goldfarben
+      // wie die "+N"-Texte/Embers, damit Lohn-Zahl und Kohle-Objekt optisch getrennt bleiben).
+      const elapsed = p.maxLife - p.life;
+      const flying = elapsed >= p.burstDur;
+      const k = flying ? clamp((elapsed - p.burstDur)/p.flyDur, 0, 1) : 0;
+      ctx.globalAlpha = flying ? clamp(1-k, 0.12, 1) : 1;
+      const r = p.size * (flying ? (1 - k*0.4) : 1);
+      ctx.fillStyle = '#8A6B45';
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#3E2E1C'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.arc(p.x - r*0.3, p.y - r*0.3, r*0.35, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
     } else if (p.type==='chain'){
       ctx.globalAlpha = clamp(p.life/p.maxLife,0,1);
       ctx.strokeStyle='#8E6FCE'; ctx.lineWidth=2;
@@ -2528,7 +2849,7 @@ function updateTopbarUI(){
   const livesInt = Math.max(0, Math.floor(state.lives));
   dom.livesValue.textContent = livesInt;
   dom.livesValue.classList.toggle('low', livesInt > 0 && livesInt <= 5);
-  dom.waveValue.textContent = state.endlessMode ? (state.waveNumber + ' ∞') : (state.waveNumber + '/' + TOTAL_WAVES);
+  dom.waveValue.textContent = state.endlessMode ? (state.waveNumber + ' ∞') : (state.waveNumber + '/' + mapTotalWaves(state.mapKey));
   const cap = maxTowers();
   dom.towerValue.textContent = state.towers.length + '/' + (cap === Infinity ? '∞' : cap);
   dom.towerValue.classList.toggle('low', cap !== Infinity && state.towers.length >= cap);
@@ -2537,7 +2858,7 @@ function updateTopbarUI(){
 }
 
 function updateWaveBarUI(){
-  if (state.waveNumber >= TOTAL_WAVES && !state.endlessMode) { dom.waveBar.classList.add('hidden'); return; }
+  if (state.waveNumber >= mapTotalWaves(state.mapKey) && !state.endlessMode) { dom.waveBar.classList.add('hidden'); return; }
   if (state.waveActive) return;
   dom.nextWaveNum.textContent = state.waveNumber + 1;
   dom.waveCountdown.textContent = Math.max(0, Math.ceil(state.waveCountdown));
@@ -2774,10 +3095,20 @@ function handleCanvasPointerDown(evt){
 
   if (state.selectedBuildType){
     const ok = placeTower(state.selectedBuildType, col, row);
-    if (ok){
-      state.selectedBuildType = null;
-      dom.canvas.classList.remove('mode-place');
-      syncBuildMenuUI();
+    /* Bau-Modus nach JEDEM Platzierungsversuch verlassen - auch nach einem
+       abgelehnten (Turmlimit, zu wenig Kohle, belegte Zelle). Sonst bleibt
+       state.selectedBuildType gesetzt und jeder Folgeklick baut weiter, statt
+       einen Turm auszuwaehlen - ab ca. Welle 8 am engeren maxTowers staendig
+       spuerbar (Playtest-Befund 12.5). */
+    state.selectedBuildType = null;
+    dom.canvas.classList.remove('mode-place');
+    syncBuildMenuUI();
+    if (!ok){
+      /* Ging der Klick auf einen bestehenden Turm, ihn gleich auswaehlen -
+         sonst braeuchte es dafuer einen zweiten Klick. */
+      const hit = state.towers.find(t => t.col === col && t.row === row);
+      state.selectedTowerId = hit ? hit.id : null;
+      syncSelectionPanel();
     }
     return;
   }
@@ -2945,6 +3276,11 @@ function wireEvents(){
 
   dom.openMapSelectBtn.addEventListener('click', openMapSelectModal);
   dom.closeMapSelectBtn.addEventListener('click', closeMapSelectModal);
+  /* Direkter Einstieg statt ueber die Kartenauswahl (Feedback 30) - die Tutorial-Karte
+     erscheint zusaetzlich auch dort (eigener Tier 'tutorial', siehe TIER_ORDER), dieser
+     Knopf ist nur der schnellere, staerker hervorgehobene Weg dahin. */
+  dom.openTutorialBtn.addEventListener('click', () => startGame(TUTORIAL_MAP_KEY));
+  dom.tutorialHintOkBtn.addEventListener('click', closeTutorialHint);
   dom.openLeaderboardBtn.addEventListener('click', () => openLeaderboardModal());
   dom.closeLeaderboardBtn.addEventListener('click', closeLeaderboardModal);
   document.querySelectorAll('input[name="controlMode"]').forEach(r => {
@@ -2972,7 +3308,7 @@ function wireEvents(){
     dom.speedBtn.textContent = state.speedMultiplier + '×';
   });
   dom.startWaveBtn.addEventListener('click', () => {
-    if (!state.waveActive && (state.waveNumber < TOTAL_WAVES || state.endlessMode) && !state.gameEnded) beginWave();
+    if (!state.waveActive && (state.waveNumber < mapTotalWaves(state.mapKey) || state.endlessMode) && !state.gameEnded) beginWave();
   });
 
   dom.retryBtn.addEventListener('click', () => { dom.gameOverModal.classList.remove('show'); startGame(state.mapKey); });
