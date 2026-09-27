@@ -3875,12 +3875,16 @@ async function sendRating(){
   dom.ratingSendBtn.textContent = 'Sende…';
   showRatingStatus('', '');
   try {
-    const payload = Object.assign({
+    /* Nur die fertige Kontext-Zeile mitschicken statt aller Einzelfelder - Formspree
+       zeigt jedes Objekt-Feld als eigenen Absatz in der Mail, sieben Einzelfelder
+       machten die Mail unuebersichtlich lang (Darius-Feedback 092726). */
+    const payload = {
       _subject: 'GLUTFRONT Rundenbewertung',
       bewertung: selectedRating + '/5',
       kommentar: dom.ratingNote.value.trim(),
+      kontext: buildFeedbackContext().kontext,
       _gotcha: dom.ratingHp.value
-    }, buildFeedbackContext());
+    };
     const res = await fetch(FEEDBACK_ENDPOINT, {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -3919,12 +3923,13 @@ async function submitFeedback(evt){
     /* JSON statt FormData: kein Seiten-Reload, kein SDK/CDN-Script noetig - Formspree
        akzeptiert POST mit application/json genauso wie multipart/form-data. _gotcha
        bleibt als Spam-Honeypot erhalten, nur jetzt im JSON-Body statt im Formdata. */
-    const payload = Object.assign({
+    const payload = {
       message: text,
       email: dom.feedbackEmail.value.trim(),
       _subject: 'GLUTFRONT Feedback',
+      kontext: buildFeedbackContext().kontext,
       _gotcha: dom.feedbackForm.elements['_gotcha'].value
-    }, buildFeedbackContext());
+    };
     const res = await fetch(FEEDBACK_ENDPOINT, {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
